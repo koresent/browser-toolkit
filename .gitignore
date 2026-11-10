@@ -222,3 +222,27 @@ __marimo__/
 # Environments & audit artifacts
 .venv/
 audit-results/
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.log
+*.sqlite.bak
+
+# Extension export & backup bundles
+stylus-backup.json
+vm-backup.zip
+*.backup.json
+*.backup.zip
+dump-styles/
+dump-scripts/
+
+# Test reports & caches
+playwright-report/
+test-results/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+

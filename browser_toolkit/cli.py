@@ -366,7 +366,7 @@ def print_theme_flaws_summary(report: Dict[str, Any]) -> None:
     print("=" * 70 + "\n")
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="browser-toolkit",
         description="Audit, inspect, and test UserStyles and UserScripts using Zen Browser profile and Playwright Gecko.",
@@ -659,6 +659,11 @@ def main() -> None:
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
 
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.command == "profile-info":

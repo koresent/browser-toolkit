@@ -90,8 +90,14 @@ class UserStyleInfo:
             if applies:
                 matched_css.append(section.css_content)
 
-        if not matched_css and self.raw_css:
-            return self.raw_css
+        if not matched_css:
+            has_restrictions = any(
+                sec.domains or sec.urls or sec.url_prefixes or sec.regexps
+                for sec in self.sections
+            )
+            if not has_restrictions and self.raw_css:
+                return self.raw_css
+            return ""
 
         return "\n\n".join(matched_css)
 
