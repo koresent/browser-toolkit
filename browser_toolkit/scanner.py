@@ -43,7 +43,6 @@ def scan_directory(
             try:
                 page = context.new_page() if not context.pages else context.pages[0]
 
-                # 1. Audit Styles
                 for f in css_files:
                     try:
                         info = parse_userstyle(f)
@@ -97,7 +96,6 @@ def scan_directory(
                             "error": str(e),
                         })
 
-                # 2. Audit Scripts
                 for f in js_files:
                     try:
                         info = parse_userscript(f)

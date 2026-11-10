@@ -28,7 +28,6 @@ class CSSAuditResult:
 
 JS_AUDIT_CSS = """
 (cssText) => {
-    // 1. Parse CSS into StyleSheet
     const sheet = new CSSStyleSheet();
     try {
         sheet.replaceSync(cssText);
@@ -36,7 +35,6 @@ JS_AUDIT_CSS = """
         return { parseError: e.message, results: [] };
     }
 
-    // 2. Extract selectors
     const rawSelectors = [];
     function walk(rules) {
         for (const r of rules) {
@@ -90,7 +88,6 @@ JS_AUDIT_CSS = """
         }
     }
 
-    // 3. Inspect each selector on current DOM
     const results = [];
     for (const sel of uniqueSelectors) {
         try {

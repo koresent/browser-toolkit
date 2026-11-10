@@ -9,7 +9,7 @@ def normalize_route_pattern(path: str) -> str:
     Normalizes a URL path into a route pattern to group similar pages.
     E.g.:
       /q/1413034        -> /q/:id
-      /user/koresent     -> /user/:slug
+      /user/alice        -> /user/:slug
       /tag/python        -> /tag/:slug
     """
     p = path.rstrip("/") or "/"

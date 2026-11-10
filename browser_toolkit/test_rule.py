@@ -5,7 +5,6 @@ from playwright.sync_api import Page
 
 JS_TEST_RULE_IMPACT = """
 (cssText) => {
-    // 1. Parse rule to extract selectors
     const sheet = new CSSStyleSheet();
     try {
         sheet.replaceSync(cssText);
@@ -66,7 +65,6 @@ def test_rule_impact(
     css_rule: str,
     output_dir: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
-    # 1. Analyze target elements before injection
     pre_analysis = page.evaluate(JS_TEST_RULE_IMPACT, css_rule)
 
     out_path = Path(output_dir or "./audit-results/rule-test").resolve()
@@ -75,7 +73,6 @@ def test_rule_impact(
     before_img = out_path / "before_rule.png"
     page.screenshot(path=str(before_img))
 
-    # 2. Inject CSS rule
     page.add_style_tag(content=css_rule)
     page.wait_for_timeout(500)
 

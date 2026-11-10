@@ -120,7 +120,6 @@ class AuditorRunner:
                             "invalid": [],
                         }
                         return report
-                    # 1. Navigate to base URL
                     page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1500)
 

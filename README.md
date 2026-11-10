@@ -6,7 +6,7 @@ Instead of naively generating CSS blindly with templates, this toolkit gives AI 
 
 ---
 
-## 🛠️ Tool Reference
+## Tool Reference
 
 ### 1. Site Discovery and Color Analysis
 - **`extract-colors <file|url>`**: (Modern evolution of `Extract-ThemeColors-Universal.ps1`)  
@@ -101,7 +101,7 @@ Instead of naively generating CSS blindly with templates, this toolkit gives AI 
 - **`check-spa <file> <target-spa-url> [--initial-url <url>]`**:  
   Tests script resilience across Single Page Application navigation (GitHub Turbo, YouTube `yt-navigate-finish`, `popstate`, PJAX). Verifies whether custom DOM buttons survive route transitions without handler errors.
   ```bash
-  uv run browser-toolkit check-spa /path/to/script.user.js https://github.com/koresent/browser-toolkit
+  uv run browser-toolkit check-spa /path/to/script.user.js https://github.com/example/repo
   ```
 - **`preview-js <file> [--url <url>]`**:  
   Live Hot-Reload server for userscript development. Reloads the target page in Zen Browser on every file save and prints fresh DOM mutation, network, and console logs.
@@ -134,8 +134,8 @@ Direct programmatic interface to Zen Browser's SQLite / IndexedDB extension data
   - Identifies new local files not yet installed in browser;
   - Detects orphan entries installed in browser but missing in git.
   ```bash
-  uv run browser-toolkit ext diff-styles /home/koresent/Projects/personal/userstyles
-  uv run browser-toolkit ext diff-scripts /home/koresent/Projects/personal/userscripts
+  uv run browser-toolkit ext diff-styles ~/Projects/personal/userstyles
+  uv run browser-toolkit ext diff-scripts ~/Projects/personal/userscripts
   ```
 - **`ext export-styles <out_dir>` / `ext export-scripts <out_dir>`**:  
   Exports all styles or scripts directly from extension databases into clean `.user.css` / `.user.js` files on disk.
@@ -184,7 +184,7 @@ Direct programmatic interface to Zen Browser's SQLite / IndexedDB extension data
 ## Installation
 
 ```bash
-cd /home/koresent/Projects/personal/browser-toolkit
+cd browser-toolkit
 uv venv
 uv pip install -e .
 ```

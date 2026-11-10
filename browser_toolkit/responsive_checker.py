@@ -114,7 +114,7 @@ JS_RESPONSIVE_AUDIT = r"""() => {
     );
     const hasHorizontalOverflow = docW > winW + 1;
 
-    // 1. Detect elements causing horizontal overflow
+    // Detect elements exceeding viewport width
     const overflowElements = [];
     if (hasHorizontalOverflow) {
         const all = document.querySelectorAll('*');
@@ -159,7 +159,7 @@ JS_RESPONSIVE_AUDIT = r"""() => {
         overflowElements.sort((a, b) => b.overflowPx - a.overflowPx);
     }
 
-    // 2. Touch targets on smaller screens (<= 820px wide)
+    // Validate interactive target sizes per WCAG 2.5.8 on mobile viewports
     const touchTargetIssues = [];
     if (winW <= 820) {
         const interactives = document.querySelectorAll('a, button, input, select, textarea, [role="button"], [onclick]');
@@ -184,7 +184,7 @@ JS_RESPONSIVE_AUDIT = r"""() => {
         }
     }
 
-    // 3. Text clipping / unintended overflow
+    // Detect clipped text nodes without ellipsis
     const textClippingIssues = [];
     const textNodes = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, li, a');
     for (let i = 0; i < textNodes.length; i++) {
@@ -207,7 +207,7 @@ JS_RESPONSIVE_AUDIT = r"""() => {
         }
     }
 
-    // 4. Fixed / Sticky screen obscuration
+    // Check for fixed or sticky elements covering more than 30% of viewport height
     const stickyCoverageIssues = [];
     const fixedSticky = document.querySelectorAll('*');
     for (let i = 0; i < fixedSticky.length; i++) {

@@ -43,8 +43,8 @@ class TestExtensionManager(unittest.TestCase):
         self.assertGreater(len(yt_script.code), 100)
 
     def test_diff_operations(self):
-        styles_dir = Path("/home/koresent/Projects/personal/userstyles")
-        scripts_dir = Path("/home/koresent/Projects/personal/userscripts")
+        styles_dir = Path.home() / "Projects" / "personal" / "userstyles"
+        scripts_dir = Path.home() / "Projects" / "personal" / "userscripts"
 
         if styles_dir.exists():
             diff_styles = self.mgr.diff_styles(styles_dir)
@@ -55,8 +55,8 @@ class TestExtensionManager(unittest.TestCase):
             self.assertGreater(diff_scripts["in_sync"], 0)
 
     def test_backup_generators(self):
-        styles_dir = Path("/home/koresent/Projects/personal/userstyles")
-        scripts_dir = Path("/home/koresent/Projects/personal/userscripts")
+        styles_dir = Path.home() / "Projects" / "personal" / "userstyles"
+        scripts_dir = Path.home() / "Projects" / "personal" / "userscripts"
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp = Path(tmp_dir)

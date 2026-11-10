@@ -30,8 +30,8 @@ def run_live_script_preview(
     info = parse_userscript(script_file)
     target_url = url or info.get_target_url()
 
-    print(f"\n⚡ Starting Live UserScript Preview for {target_url}")
-    print(f"📁 Watching: {script_file}")
+    print(f"\nStarting Live UserScript Preview for {target_url}")
+    print(f"Watching: {script_file}")
     print(f"Mode: {'Headless' if headless else 'Interactive Headful Window'}")
     print("Press Ctrl+C to stop.\n")
 
@@ -74,12 +74,12 @@ def run_live_script_preview(
                         net_count = len(res.network_requests)
                         cmds = ", ".join(res.registered_commands) if res.registered_commands else "None"
 
-                        status = "✅ OK" if err_count == 0 else f"❌ {err_count} errors"
+                        status = "OK" if err_count == 0 else f"{err_count} errors"
                         print(f"[{time.strftime('%H:%M:%S')}] {status} ({dt_ms}ms) | Added nodes: {mut_count} | Net reqs: {net_count} | Commands: {cmds}")
 
                         if res.errors:
                             for err in res.errors[:3]:
-                                print(f"    ⚠️ {err}")
+                                print(f"    Error: {err}")
 
                         if screenshot_on_change:
                             page.screenshot(path=output_screenshot)

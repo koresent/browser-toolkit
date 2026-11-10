@@ -30,7 +30,7 @@ class UserStyleInfo:
         """Determines the most plausible target URL to open for testing."""
         if self.homepage_url:
             parsed = urlparse(self.homepage_url)
-            # If homepage is repository (e.g. github.com/koresent/...), don't use it if section is for another domain
+            # If homepage is a repository (e.g. github.com/username/...), avoid using it if section is for another domain
             for section in self.sections:
                 if any(d in parsed.netloc for d in section.domains):
                     return self.homepage_url

@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page
 
 JS_EXTRACT_PAGE_PALETTE = r"""() => {
-    // 1. Extract CSS custom properties (variables) defined on the page
+    // Extract CSS custom properties from stylesheets
     const cssVars = {};
     for (const sheet of document.styleSheets) {
         try {
@@ -51,7 +51,7 @@ JS_EXTRACT_PAGE_PALETTE = r"""() => {
         return `#${r}${g}${b}`.toLowerCase();
     }
 
-    // 2. Scan computed styles across DOM
+    // Scan computed styles across DOM
     const bgFreq = {};
     const textFreq = {};
     const borderFreq = {};
@@ -109,7 +109,7 @@ JS_EXTRACT_PAGE_PALETTE = r"""() => {
             .sort((a, b) => b.count - a.count);
     }
 
-    // 3. Detect Icons / SVGs that need inversion
+    // Inspect icon dimensions for potential dark theme inversion
     const svgCount = document.querySelectorAll('svg').length;
     const imgIcons = [];
     for (const img of document.querySelectorAll('img')) {

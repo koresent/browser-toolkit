@@ -30,8 +30,8 @@ def run_live_preview(
     if not style_file.exists():
         raise FileNotFoundError(f"Style file not found: {style_file}")
 
-    print(f"\n🔥 Starting Live Preview for {url}")
-    print(f"📁 Watching: {style_file}")
+    print(f"\nStarting Live Preview for {url}")
+    print(f"Watching: {style_file}")
     print(f"Mode: {'Headless' if headless else 'Interactive Headful Window'}")
     print("Press Ctrl+C to stop.\n")
 
@@ -66,11 +66,11 @@ def run_live_preview(
                             page.evaluate(JS_HOT_RELOAD, css_content)
 
                             t_str = time.strftime("%H:%M:%S")
-                            print(f"[{t_str}] ⚡ Hot-reloaded CSS ({len(css_content)} bytes)")
+                            print(f"[{t_str}] Hot-reloaded CSS ({len(css_content)} bytes)")
 
                             if screenshot_on_change:
                                 page.screenshot(path=output_screenshot)
-                                print(f"[{t_str}] 📸 Screenshot saved to {output_screenshot}")
+                                print(f"[{t_str}] Screenshot saved to {output_screenshot}")
                         except Exception as e:
                             print(f"[Error] Failed to reload CSS: {e}")
 

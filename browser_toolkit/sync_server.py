@@ -16,8 +16,8 @@ from .parser import parse_userstyle, parse_userscript
 
 
 class ExtensionSyncHandler(http.server.SimpleHTTPRequestHandler):
-    styles_dir: Path = Path("/home/koresent/Projects/personal/userstyles")
-    scripts_dir: Path = Path("/home/koresent/Projects/personal/userscripts")
+    styles_dir: Path = Path.home() / "Projects" / "personal" / "userstyles"
+    scripts_dir: Path = Path.home() / "Projects" / "personal" / "userscripts"
     ext_manager: Optional[ExtensionManager] = None
 
     def do_GET(self) -> None:
@@ -105,7 +105,7 @@ class ExtensionSyncHandler(http.server.SimpleHTTPRequestHandler):
               <td><code>{rel}</code></td>
               <td>
                 <a class="btn btn-style" href="/styles/{urllib.parse.quote(str(rel))}">
-                  📥 Install in Stylus
+                  Install in Stylus
                 </a>
               </td>
             </tr>
@@ -123,14 +123,14 @@ class ExtensionSyncHandler(http.server.SimpleHTTPRequestHandler):
               <td><code>{rel}</code></td>
               <td>
                 <a class="btn btn-script" href="/scripts/{urllib.parse.quote(str(rel))}">
-                  ⚡ Install in Violentmonkey
+                  Install in Violentmonkey
                 </a>
               </td>
             </tr>
             """)
 
         html = f"""<!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Browser Toolkit — Extension Hub</title>
@@ -214,15 +214,15 @@ class ExtensionSyncHandler(http.server.SimpleHTTPRequestHandler):
 </head>
 <body>
   <div class="container">
-    <h1>🎨 Browser Toolkit Extension Hub</h1>
-    <div class="subtitle">1-Click deploy and automated sync for Stylus and Violentmonkey in Zen Browser</div>
+    <h1>Browser Toolkit Extension Hub</h1>
+    <div class="subtitle">1-Click install and automated sync for Stylus and Violentmonkey in Zen Browser</div>
 
     <div class="actions-bar">
       <a class="btn btn-backup" href="/export/stylus-backup.json" download="stylus-backup.json">
-        📦 Download Stylus Backup ({len(styles)} styles)
+        Download Stylus Backup ({len(styles)} styles)
       </a>
       <a class="btn btn-backup" href="/export/vm-backup.zip" download="vm-backup.zip">
-        📦 Download Violentmonkey Backup ({len(scripts)} scripts)
+        Download Violentmonkey Backup ({len(scripts)} scripts)
       </a>
     </div>
 
@@ -276,8 +276,8 @@ def run_sync_server(
     profile_path: Optional[str | Path] = None,
 ) -> None:
     """Launches local extension sync & 1-click install server."""
-    s_dir = Path(styles_dir).resolve() if styles_dir else Path("/home/koresent/Projects/personal/userstyles")
-    sc_dir = Path(scripts_dir).resolve() if scripts_dir else Path("/home/koresent/Projects/personal/userscripts")
+    s_dir = Path(styles_dir).resolve() if styles_dir else Path.home() / "Projects" / "personal" / "userstyles"
+    sc_dir = Path(scripts_dir).resolve() if scripts_dir else Path.home() / "Projects" / "personal" / "userscripts"
 
     ExtensionSyncHandler.styles_dir = s_dir
     ExtensionSyncHandler.scripts_dir = sc_dir
@@ -289,11 +289,11 @@ def run_sync_server(
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("127.0.0.1", port), ExtensionSyncHandler) as httpd:
         print("\n" + "=" * 65)
-        print(f"🚀 Extension Hub & 1-Click Server running at: http://127.0.0.1:{port}")
-        print(f"📁 Styles directory:  {s_dir}")
-        print(f"📁 Scripts directory: {sc_dir}")
+        print(f"Extension Hub & 1-Click Server running at: http://127.0.0.1:{port}")
+        print(f"Styles directory:  {s_dir}")
+        print(f"Scripts directory: {sc_dir}")
         print("-" * 65)
-        print("💡 Open in Zen Browser to 1-click install into Stylus & Violentmonkey!")
+        print("Open in Zen Browser to 1-click install into Stylus & Violentmonkey.")
         print("Press Ctrl+C to stop.\n")
         try:
             httpd.serve_forever()

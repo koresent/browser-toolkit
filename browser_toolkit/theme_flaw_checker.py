@@ -158,7 +158,7 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
         if (comp.display === 'none' || comp.visibility === 'hidden' || comp.opacity === '0') continue;
         checkedCount++;
 
-        // 1. Check bright bleedthrough in dark mode (or dark bleedthrough in light mode)
+        // Detect bright bleedthrough in dark mode (or dark bleedthrough in light mode)
         const bgRgb = parseRgb(comp.backgroundColor);
         if (bgRgb && bgRgb.a > 0.6) {
             const lum = getLuminance(bgRgb);
@@ -189,7 +189,7 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
             }
         }
 
-        // 2. Check form input elements
+        // Inspect native form controls for contrast and unstyled backgrounds
         if (['input', 'textarea', 'select'].includes(tag)) {
             const inputType = el.getAttribute('type') || (tag === 'textarea' ? 'textarea' : 'text');
             if (!['hidden', 'submit', 'button', 'image'].includes(inputType)) {
@@ -223,7 +223,7 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
             }
         }
 
-        // 3. SVG icons invisibility
+        // Detect low-contrast SVG icons
         if (tag === 'svg') {
             const svgFill = parseRgb(comp.fill);
             const parentBg = getEffectiveBg(el);
@@ -241,7 +241,7 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
             }
         }
 
-        // 4. Critical invisible text (contrast < 1.8:1)
+        // Flag text with contrast ratio under 1.8:1
         if (['p', 'span', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'th', 'li', 'label', 'button'].includes(tag)) {
             const text = (el.innerText || '').trim();
             if (text.length >= 2 && el.children.length <= 1) {
@@ -266,7 +266,7 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
         if (bleedthroughIssues.length >= 20 && invisibleTextIssues.length >= 20) break;
     }
 
-    // 5. Scrollbar theming check
+    // Check for scrollbar-color property on root
     const rootStyle = window.getComputedStyle(document.documentElement);
     const bodyStyle = document.body ? window.getComputedStyle(document.body) : null;
     const hasCustomScrollbar = (

@@ -18,26 +18,26 @@ def print_style_summary(report: Dict[str, Any]) -> None:
     pages = report.get("tested_pages", [])
 
     print("\n" + "=" * 60)
-    print(f"🎨 UserStyle Audit: {report.get('name')} (v{report.get('version', 'unknown')})")
-    print(f"🌐 Base Target:    {report.get('target_url')}")
-    print(f"📁 Source file:    {report.get('style_file')}")
-    print(f"📸 Screenshots:    {report.get('output_dir')}/")
+    print(f"UserStyle Audit: {report.get('name')} (v{report.get('version', 'unknown')})")
+    print(f"Base Target:    {report.get('target_url')}")
+    print(f"Source file:    {report.get('style_file')}")
+    print(f"Screenshots:    {report.get('output_dir')}/")
     if pages:
-        print(f"📑 Tested Pages ({len(pages)}):")
+        print(f"Tested Pages ({len(pages)}):")
         for p in pages:
             print(f"   • {p['url']} ({p.get('matched_count', 0)} selectors matched)")
     print("-" * 60)
-    print(f"📊 Cumulative Summary: {total} total | ✅ {matched} matched | ❌ {dead} unconfirmed/dead | ⚠️ {invalid} invalid")
+    print(f"Cumulative Summary: {total} total | {matched} matched | {dead} unconfirmed/dead | {invalid} invalid")
     print("-" * 60)
 
     if dead > 0:
-        print("\n❌ Unmatched / Dead Selectors on Visited Pages:")
+        print("\nUnmatched / Dead Selectors on Visited Pages:")
         for item in audit.get("dead", [])[:15]:
             sel = item["selector"]
             print(f"  • {sel}")
             suggestions = item.get("suggestions", [])
             if suggestions:
-                print("    💡 Potential candidates found in DOM:")
+                print("    Potential candidates found in DOM:")
                 for s in suggestions[:2]:
                     cls_str = f".{s['className']}" if s.get("className") else ""
                     id_str = f"#{s['id']}" if s.get("id") else ""
@@ -47,7 +47,7 @@ def print_style_summary(report: Dict[str, Any]) -> None:
             print(f"  ... and {dead - 15} more unconfirmed selectors (may belong to other subpages).")
 
     if matched > 0:
-        print("\n✅ Matched Selectors (Sample):")
+        print("\nMatched Selectors (Sample):")
         for item in audit.get("matched", [])[:8]:
             pages_found = len(item.get("found_on_pages", []))
             pages_suffix = f" (on {pages_found} page{'s' if pages_found > 1 else ''})" if pages_found else ""
@@ -69,11 +69,11 @@ def print_script_summary(report: Dict[str, Any]) -> None:
 
     print("\n" + "=" * 60)
     print(f"⚙️ UserScript Audit: {report.get('name')} (v{report.get('version', 'unknown')})")
-    print(f"🌐 Target URL:     {report.get('target_url')}")
-    print(f"📁 Source file:    {report.get('script_file')}")
-    print(f"📸 Screenshot:     {report.get('screenshot')}")
+    print(f"Target URL:     {report.get('target_url')}")
+    print(f"Source file:    {report.get('script_file')}")
+    print(f"Screenshot:     {report.get('screenshot')}")
     print("-" * 60)
-    print(f"Execution: {'✅ Success' if executed and not errors else '❌ Issues Detected'}")
+    print(f"Execution: {'Success' if executed and not errors else 'Issues Detected'}")
     if commands:
         print(f"Menu Commands ({len(commands)}): {', '.join(commands)}")
 
@@ -87,19 +87,19 @@ def print_script_summary(report: Dict[str, Any]) -> None:
             print(f"    ... and {added_cnt - 5} more added elements.")
 
     if net_reqs:
-        print(f"\n🌐 Network Requests ({len(net_reqs)}):")
+        print(f"\nNetwork Requests ({len(net_reqs)}):")
         for req in net_reqs[:5]:
             print(f"  • [{req.get('method', 'GET')}] {req.get('url')} (Status: {req.get('status') or req.get('error')})")
 
     print("-" * 60)
 
     if errors:
-        print("\n❌ Script Errors:")
+        print("\nScript Errors:")
         for err in errors:
             print(f"  • {err}")
 
     if console:
-        print(f"\n💬 Recent Console Messages ({len(console)}):")
+        print(f"\nRecent Console Messages ({len(console)}):")
         for msg in console[-10:]:
             print(f"  [{msg.get('type', 'log')}] {msg.get('text', '')}")
 
@@ -120,18 +120,18 @@ def print_script_test_summary(report: Dict[str, Any]) -> None:
 
     print("\n" + "=" * 70)
     print(f"⚡ Interactive UserScript Test: {report.get('name')} (v{report.get('version', 'unknown')})")
-    print(f"🌐 Target:         {report.get('target_url')}")
-    print(f"📁 Script:         {report.get('script_file')}")
-    print(f"📸 Screenshot:     {report.get('screenshot')}")
+    print(f"Target:         {report.get('target_url')}")
+    print(f"Script:         {report.get('script_file')}")
+    print(f"Screenshot:     {report.get('screenshot')}")
     print("-" * 70)
-    print(f"Status: {'✅ OK' if executed and not errors else '❌ Errors Detected'}")
+    print(f"Status: {'OK' if executed and not errors else 'Errors Detected'}")
 
     if commands:
         print(f"Registered Menu Commands: {', '.join(commands)}")
 
     if cmd_res:
         succ = cmd_res.get("success")
-        print(f"Menu Command Trigger: {'✅ Succeeded' if succ else '❌ Failed: ' + str(cmd_res.get('error'))}")
+        print(f"Menu Command Trigger: {'Succeeded' if succ else 'Failed: ' + str(cmd_res.get('error'))}")
 
     if added_nodes:
         print(f"\n➕ DOM Elements Inserted by Script ({len(added_nodes)}):")
@@ -142,28 +142,28 @@ def print_script_test_summary(report: Dict[str, Any]) -> None:
             print(f"    ... and {len(added_nodes) - 8} more elements.")
 
     if net_reqs:
-        print(f"\n🌐 Network Requests Sent ({len(net_reqs)}):")
+        print(f"\nNetwork Requests Sent ({len(net_reqs)}):")
         for req in net_reqs:
             st = req.get("status") if req.get("status") is not None else req.get("error")
             print(f"  • [{req.get('method')}] {req.get('url')} -> {st} ({req.get('durationMs', 0)}ms)")
 
     if clip:
-        print(f"\n📋 Clipboard Writes ({len(clip)}):")
+        print(f"\nClipboard Writes ({len(clip)}):")
         for c in clip:
             print(f"  • \"{c.get('text', '')[:60]}\"")
 
     if notifs:
-        print(f"\n🔔 Notifications ({len(notifs)}):")
+        print(f"\nNotifications ({len(notifs)}):")
         for n in notifs:
             print(f"  • [{n.get('title')}] {n.get('text')}")
 
     if errors:
-        print(f"\n❌ Uncaught Errors ({len(errors)}):")
+        print(f"\nUncaught Errors ({len(errors)}):")
         for err in errors:
             print(f"  • {err}")
 
     if console:
-        print(f"\n💬 Console Output ({len(console)}):")
+        print(f"\nConsole Output ({len(console)}):")
         for msg in console[-10:]:
             print(f"  [{msg.get('type')}] {msg.get('text')}")
 
@@ -177,27 +177,27 @@ def print_spa_summary(report: Dict[str, Any]) -> None:
     errors = report.get("errors", [])
 
     print("\n" + "=" * 70)
-    print(f"🔄 SPA Route Resilience Audit: {report.get('script')}")
+    print(f"SPA Route Resilience Audit: {report.get('script')}")
     print(f"Initial: {report.get('initial_url')}")
     print(f"Target:  {report.get('target_url')}")
     print("-" * 70)
-    status_str = "✅ SURVIVED SPA TRANSITION" if survived else "❌ BROKEN IN SPA ROUTING"
+    status_str = "SURVIVED SPA TRANSITION" if survived else "BROKEN IN SPA ROUTING"
     print(f"Verdict: {status_str}")
     print(f"Inserted Elements: {report.get('initial_added_elements_count', 0)} initial -> {report.get('post_navigation_elements_count', 0)} retained")
 
     if retained:
-        print("\n✅ Elements Retained After Transition:")
+        print("\nElements Retained After Transition:")
         for sel in retained[:5]:
             print(f"  • {sel}")
 
     if lost:
-        print("\n❌ Elements Wiped Out During Transition:")
+        print("\nElements Wiped Out During Transition:")
         for sel in lost[:5]:
             print(f"  • {sel}")
-        print("  💡 Tip: Listen to 'turbo:load', 'popstate', or 'yt-navigate-finish' to re-mount UI elements.")
+        print("  Tip: Listen to 'turbo:load', 'popstate', or 'yt-navigate-finish' to re-mount UI elements.")
 
     if errors:
-        print(f"\n❌ Errors during transition ({len(errors)}):")
+        print(f"\nErrors during transition ({len(errors)}):")
         for err in errors:
             print(f"  • {err}")
 
@@ -207,7 +207,7 @@ def print_spa_summary(report: Dict[str, Any]) -> None:
 def print_search_results(data: Dict[str, Any]) -> None:
     matches = data.get("matches", [])
     print("\n" + "=" * 60)
-    print(f"🔍 DOM Search on {data.get('url')}")
+    print(f"DOM Search on {data.get('url')}")
     print(f"Matched Elements: {len(matches)}")
     print("-" * 60)
 
@@ -222,7 +222,7 @@ def print_search_results(data: Dict[str, Any]) -> None:
 
         selectors = m.get("selectors", [])
         if selectors:
-            print("   💡 Suggested Stable Selectors:")
+            print("   Suggested Stable Selectors:")
             for s in selectors[:3]:
                 unique_badge = "★ Unique (1 element)" if s.get("count") == 1 else f"({s.get('count')} elements)"
                 print(f"      • {s['selector']}  [{unique_badge}]")
@@ -236,13 +236,13 @@ def print_scan_summary(data: Dict[str, Any]) -> None:
     healthy = total - broken
 
     print("\n" + "=" * 70)
-    print(f"📂 Batch Scan Report: {data.get('root_dir')}")
-    print(f"Total Files: {total} | ✅ Healthy: {healthy} | ❌ Broken / Errors: {broken}")
+    print(f"Batch Scan Report: {data.get('root_dir')}")
+    print(f"Total Files: {total} | Healthy: {healthy} | Broken / Errors: {broken}")
     print("-" * 70)
 
     for r in data.get("results", []):
         st = r.get("status")
-        badge = "✅ OK" if st == "OK" else "❌ BROKEN"
+        badge = "OK" if st == "OK" else "BROKEN"
         name = r.get("name")
         rel_file = r.get("file")
         if r.get("type") == "userstyle":
@@ -260,8 +260,8 @@ def print_scan_summary(data: Dict[str, Any]) -> None:
 
 def print_responsive_summary(report: Dict[str, Any]) -> None:
     print("\n" + "=" * 70)
-    print(f"📱 Responsive Layout Audit: {report.get('url')}")
-    print(f"Status: {'⚠️ Potential Issues Found' if report.get('has_any_issues') else '✅ Perfect Responsive Layout'}")
+    print(f"Responsive Layout Audit: {report.get('url')}")
+    print(f"Status: {'Potential Issues Found' if report.get('has_any_issues') else 'Perfect Responsive Layout'}")
     print("=" * 70)
 
     for vp in report.get("viewports", []):
@@ -280,7 +280,7 @@ def print_responsive_summary(report: Dict[str, Any]) -> None:
         print("-" * 50)
 
         if has_h_overflow:
-            print(f"  ❌ HORIZONTAL OVERFLOW DETECTED: Page width {doc_w}px exceeds viewport {win_w}px (diff: +{doc_w - win_w}px)")
+            print(f"  HORIZONTAL OVERFLOW DETECTED: Page width {doc_w}px exceeds viewport {win_w}px (diff: +{doc_w - win_w}px)")
             print("     Elements causing layout blowout:")
             for el in overflow_els[:5]:
                 print(f"       • <{el['tag_name']}> {el['selector']} (overflow: +{el['overflow_px']}px)")
@@ -289,26 +289,26 @@ def print_responsive_summary(report: Dict[str, Any]) -> None:
                 styles = el.get("computed_styles", {})
                 print(f"         CSS: width={styles.get('width')}, max-width={styles.get('maxWidth')}, overflow-x={styles.get('overflowX')}")
         else:
-            print(f"  ✅ No horizontal scroll (Page width fits within {win_w}px)")
+            print(f"  No horizontal scroll (Page width fits within {win_w}px)")
 
         if touch_issues:
-            print(f"  ⚠️ Touch targets < 24x24px ({len(touch_issues)} found):")
+            print(f"  Touch targets < 24x24px ({len(touch_issues)} found):")
             for t in touch_issues[:4]:
                 snippet = f" (\"{t['text_snippet']}\")" if t.get("text_snippet") else ""
                 print(f"       • {t['selector']} [{t['width']}x{t['height']}px]{snippet}")
 
         if text_issues:
-            print(f"  ⚠️ Text clipping / cut-off ({len(text_issues)} found):")
+            print(f"  Text clipping / cut-off ({len(text_issues)} found):")
             for tc in text_issues[:3]:
                 print(f"       • {tc['selector']} (scrollWidth: {tc['scroll_width']}px > clientWidth: {tc['client_width']}px) \"{tc['text_snippet']}\"")
 
         if sticky_issues:
-            print(f"  ⚠️ Large Fixed/Sticky screen coverage ({len(sticky_issues)} found):")
+            print(f"  Large Fixed/Sticky screen coverage ({len(sticky_issues)} found):")
             for sc in sticky_issues[:2]:
                 print(f"       • {sc['selector']} covers {sc['height_ratio_pct']}% of screen height ({sc['position']})")
 
         if vp.get("screenshot_path"):
-            print(f"  📸 Screenshot: {vp['screenshot_path']}")
+            print(f"  Screenshot: {vp['screenshot_path']}")
 
     print("\n" + "=" * 70 + "\n")
 
@@ -323,12 +323,12 @@ def print_theme_flaws_summary(report: Dict[str, Any]) -> None:
     total_checked = report.get("total_elements_checked", 0)
 
     print("\n" + "=" * 70)
-    print(f"🎨 Theme Quality & Visual Flaw Audit: {report.get('url')} (Mode: {mode})")
+    print(f"Theme Quality & Visual Flaw Audit: {report.get('url')} (Mode: {mode})")
     print(f"Checked DOM Elements: {total_checked}")
     print("-" * 70)
 
     if bleed:
-        print(f"\n❌ Unstyled Bleedthrough Containers ({len(bleed)} found):")
+        print(f"\nUnstyled Bleedthrough Containers ({len(bleed)} found):")
         for b in bleed[:8]:
             snippet = f" (\"{b['text_snippet']}\")" if b.get("text_snippet") else ""
             print(f"  • {b['selector']} [{b['bounds']['width']}x{b['bounds']['height']}px] -> {b['color']}{snippet}")
@@ -336,7 +336,7 @@ def print_theme_flaws_summary(report: Dict[str, Any]) -> None:
             print(f"    ... and {len(bleed) - 8} more bright containers.")
 
     if invis_text:
-        print(f"\n❌ Invisible / Blended Text ({len(invis_text)} found):")
+        print(f"\nInvisible / Blended Text ({len(invis_text)} found):")
         for t in invis_text[:8]:
             print(f"  • {t['selector']}: \"{t['text']}\"")
             print(f"    Ratio: {t['contrast_ratio']}:1 | color: {t['color']} on bg: {t['bg_color']}")
@@ -344,24 +344,24 @@ def print_theme_flaws_summary(report: Dict[str, Any]) -> None:
             print(f"    ... and {len(invis_text) - 8} more low-contrast text elements.")
 
     if inputs:
-        print(f"\n⚠️ Unstyled / Broken Form Inputs ({len(inputs)} found):")
+        print(f"\nUnstyled / Broken Form Inputs ({len(inputs)} found):")
         for inp in inputs[:6]:
             print(f"  • <{inp['tag_name']} type=\"{inp['input_type']}\"> {inp['selector']}")
             print(f"    Issue: {inp['description']} (bg: {inp['bg_color']}, color: {inp['text_color']})")
 
     if icons:
-        print(f"\n⚠️ Hidden / Low-Contrast SVG Icons ({len(icons)} found):")
+        print(f"\nHidden / Low-Contrast SVG Icons ({len(icons)} found):")
         for ic in icons[:5]:
             print(f"  • {ic['selector']} ({ic['fill_or_stroke']} against {ic['parent_bg']}, ratio: {ic['contrast_ratio']}:1)")
 
-    scrollbar_str = "✅ Custom scrollbar applied" if has_scrollbar else "⚠️ Native default scrollbars (consider adding scrollbar-color: #504945 #282828)"
+    scrollbar_str = "Custom scrollbar applied" if has_scrollbar else "Native default scrollbars (consider adding scrollbar-color: #504945 #282828)"
     print(f"\nScrollbar: {scrollbar_str}")
 
     if not (bleed or invis_text or inputs or icons):
         if has_scrollbar:
-            print("\n🎉 Flawless! No bleedthrough, invisible text, or broken form inputs detected.")
+            print("\nFlawless! No bleedthrough, invisible text, or broken form inputs detected.")
         else:
-            print("\n🎉 Colors & contrast are clean! No bleedthrough, invisible text, or broken form inputs detected.")
+            print("\nColors & contrast are clean! No bleedthrough, invisible text, or broken form inputs detected.")
 
     print("=" * 70 + "\n")
 
@@ -592,8 +592,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ext backup
     backup_p = ext_subparsers.add_parser("backup", help="Build ready-to-import backup bundles for Stylus and Violentmonkey")
-    backup_p.add_argument("--styles-dir", default="/home/koresent/Projects/personal/userstyles", help="Local userstyles directory")
-    backup_p.add_argument("--scripts-dir", default="/home/koresent/Projects/personal/userscripts", help="Local userscripts directory")
+    backup_p.add_argument(
+        "--styles-dir",
+        default=str(Path.home() / "Projects" / "personal" / "userstyles"),
+        help="Local userstyles directory",
+    )
+    backup_p.add_argument(
+        "--scripts-dir",
+        default=str(Path.home() / "Projects" / "personal" / "userscripts"),
+        help="Local userscripts directory",
+    )
     backup_p.add_argument("--out-stylus", default="stylus-backup.json", help="Path for Stylus backup JSON")
     backup_p.add_argument("--out-vm", default="vm-backup.zip", help="Path for Violentmonkey backup ZIP")
 
@@ -751,7 +759,7 @@ def main() -> None:
             impact = data.get("impact", {})
             matched = impact.get("matched", [])
             print("\n" + "=" * 60)
-            print(f"🧪 Rule Impact Test on {args.url}")
+            print(f"Rule Impact Test on {args.url}")
             print(f"CSS: {args.css}")
             print(f"Matched elements: {len(matched)}")
             print(f"High-impact (>25% viewport) elements: {impact.get('highImpactCount', 0)}")
@@ -773,7 +781,7 @@ def main() -> None:
         if args.json:
             print(json.dumps(data, indent=2, ensure_ascii=False))
         else:
-            print(f"\n📸 Screenshot captured and saved to: {data.get('saved_to')}\n")
+            print(f"\nScreenshot captured and saved to: {data.get('saved_to')}\n")
 
     elif args.command == "interact":
         raw_actions = args.actions
@@ -799,7 +807,7 @@ def main() -> None:
         else:
             res = data.get("result", {})
             count = res.get("count", 0)
-            print(f"\n🔍 Inspecting '{args.selector}' on {args.url}")
+            print(f"\nInspecting '{args.selector}' on {args.url}")
             print(f"Found elements: {count}")
             for idx, item in enumerate(res.get("items", [])):
                 print(f"\n--- Element #{idx + 1} <{item['tagName']}> ---")
@@ -821,7 +829,7 @@ def main() -> None:
         else:
             archs = data.get("archetypes", [])
             print("\n" + "=" * 70)
-            print(f"🗺️ Site Template Archetypes: {data.get('base_url')}")
+            print(f"Site Template Archetypes: {data.get('base_url')}")
             print(f"Scanned {data.get('pages_visited')} pages | Discovered {len(archs)} unique structural layouts")
             print(f"Termination: {data.get('stopped_reason')}")
             print("-" * 70)
@@ -831,9 +839,9 @@ def main() -> None:
                 print(f" #{a['index']} [{a.get('title', 'No title')[:40]}]{sim_str}{matched_str}")
                 print(f"    URL: {a['url']}")
                 if a.get("screenshot"):
-                    print(f"    📸 {a['screenshot']}")
+                    print(f"    {a['screenshot']}")
             if data.get("cumulative_matched_count"):
-                print(f"\n📊 Total Selectors Matched: {data['cumulative_matched_count']} | Remaining dead: {data.get('remaining_dead_count', 0)}")
+                print(f"\nTotal Selectors Matched: {data['cumulative_matched_count']} | Remaining dead: {data.get('remaining_dead_count', 0)}")
             print("=" * 70 + "\n")
 
     elif args.command == "extract-palette":
@@ -842,7 +850,7 @@ def main() -> None:
             print(json.dumps(data, indent=2, ensure_ascii=False))
         else:
             print("\n" + "=" * 60)
-            print(f"🎨 Palette Reverse Engineering: {args.url}")
+            print(f"Palette Reverse Engineering: {args.url}")
             print("-" * 60)
             vars_list = data.get("site_color_variables", [])
             print(f"Native Site Color Variables Found ({len(vars_list)}):")
@@ -873,7 +881,7 @@ def main() -> None:
             failed = audit.get("failedCount", 0)
             print("\n" + "=" * 60)
             print(f"⚖️ WCAG Contrast Audit on {args.url}")
-            print(f"Checked Text Nodes: {total} | ❌ Issues: {failed} | ✅ Passing: {total - failed}")
+            print(f"Checked Text Nodes: {total} | Issues: {failed} | Passing: {total - failed}")
             print("-" * 60)
             if issues:
                 print("Low Contrast Elements (Needs Gruvbox adjustment):")
@@ -883,7 +891,7 @@ def main() -> None:
                 if len(issues) > 10:
                     print(f"    ... and {len(issues) - 10} more low-contrast elements.")
             else:
-                print("🎉 Excellent! All visible text elements meet WCAG contrast thresholds!")
+                print("Excellent! All visible text elements meet WCAG contrast thresholds!")
             print("=" * 60 + "\n")
 
     elif args.command == "preview":
@@ -902,7 +910,7 @@ def main() -> None:
             print(f"\n✨ Extracted color skeleton saved to: {args.output} ({len(res)} bytes)\n")
         else:
             print("\n" + "=" * 60)
-            print(f"🎨 Extracted Color Skeleton for {args.target}")
+            print(f"Extracted Color Skeleton for {args.target}")
             print("-" * 60)
             print(res[:2000] + ("\n... [truncated]" if len(res) > 2000 else ""))
             print("=" * 60 + "\n")
@@ -992,13 +1000,13 @@ def main() -> None:
                 print(json.dumps(st, indent=2, ensure_ascii=False))
             else:
                 print("\n" + "=" * 65)
-                print("🧩 Zen Browser Extension Status")
+                print("Zen Browser Extension Status")
                 print("-" * 65)
                 print(f"Profile directory:  {st['profile_dir']}")
                 print(f"Stylus DB:          {st['stylus_db']}")
                 print(f"Violentmonkey DB:   {st['violentmonkey_db']}")
                 print("-" * 65)
-                print(f"🎨 Stylus Styles:        {st['stylus_installed_count']} installed ({st['active_styles_count']} active)")
+                print(f"Stylus Styles:        {st['stylus_installed_count']} installed ({st['active_styles_count']} active)")
                 print(f"⚙️ Violentmonkey Scripts: {st['violentmonkey_installed_count']} installed ({st['active_scripts_count']} active)")
                 print("=" * 65 + "\n")
 
@@ -1011,7 +1019,7 @@ def main() -> None:
                 print(json.dumps(styles, indent=2, ensure_ascii=False))
             else:
                 print("\n" + "=" * 70)
-                print(f"🎨 Stylus Installed Styles ({len(styles)}):")
+                print(f"Stylus Installed Styles ({len(styles)}):")
                 print("-" * 70)
                 for s in styles:
                     status_badge = "✅" if s["enabled"] else "⏸️"
@@ -1050,11 +1058,11 @@ def main() -> None:
                 print(json.dumps(diff, indent=2, ensure_ascii=False))
             else:
                 print("\n" + "=" * 70)
-                print(f"🔍 UserStyles Sync Diff: Local ({args.local_dir}) vs Stylus DB")
+                print(f"UserStyles Sync Diff: Local ({args.local_dir}) vs Stylus DB")
                 print(f"Local files: {diff['total_local']} | Installed in Stylus: {diff['total_installed']} | In Sync: {diff['in_sync']}")
                 print("-" * 70)
                 if diff["modified"]:
-                    print(f"\n⚠️ Modified / Out of Sync ({len(diff['modified'])}):")
+                    print(f"\nModified / Out of Sync ({len(diff['modified'])}):")
                     for m in diff["modified"]:
                         print(f"  • {m['name']} ({m['file']}) [Local: {m['local_size']}B, Stylus: {m['installed_size']}B]")
                 if diff["only_local"]:
@@ -1062,7 +1070,7 @@ def main() -> None:
                     for ol in diff["only_local"][:10]:
                         print(f"  • {ol['name']} ({ol['file']})")
                 if diff["only_installed"]:
-                    print(f"\n📦 Only in Stylus (Missing in git repo) ({len(diff['only_installed'])}):")
+                    print(f"\nOnly in Stylus (Missing in git repo) ({len(diff['only_installed'])}):")
                     for oi in diff["only_installed"][:10]:
                         print(f"  • [{oi['id']}] {oi['name']}")
                 print("=" * 70 + "\n")
@@ -1073,11 +1081,11 @@ def main() -> None:
                 print(json.dumps(diff, indent=2, ensure_ascii=False))
             else:
                 print("\n" + "=" * 70)
-                print(f"🔍 UserScripts Sync Diff: Local ({args.local_dir}) vs Violentmonkey DB")
+                print(f"UserScripts Sync Diff: Local ({args.local_dir}) vs Violentmonkey DB")
                 print(f"Local files: {diff['total_local']} | Installed in VM: {diff['total_installed']} | In Sync: {diff['in_sync']}")
                 print("-" * 70)
                 if diff["modified"]:
-                    print(f"\n⚠️ Modified / Out of Sync ({len(diff['modified'])}):")
+                    print(f"\nModified / Out of Sync ({len(diff['modified'])}):")
                     for m in diff["modified"]:
                         print(f"  • {m['name']} ({m['file']}) [Local: {m['local_size']}B, VM: {m['installed_size']}B]")
                 if diff["only_local"]:
@@ -1085,7 +1093,7 @@ def main() -> None:
                     for ol in diff["only_local"][:10]:
                         print(f"  • {ol['name']} ({ol['file']})")
                 if diff["only_installed"]:
-                    print(f"\n📦 Only in Violentmonkey (Missing in git repo) ({len(diff['only_installed'])}):")
+                    print(f"\nOnly in Violentmonkey (Missing in git repo) ({len(diff['only_installed'])}):")
                     for oi in diff["only_installed"][:10]:
                         print(f"  • [{oi['id']}] {oi['name']} (v{oi['version']})")
                 print("=" * 70 + "\n")
@@ -1094,12 +1102,12 @@ def main() -> None:
             styles_cnt = runner.ext_build_stylus_backup(args.styles_dir, args.out_stylus)
             vm_cnt = runner.ext_build_vm_backup(args.scripts_dir, args.out_vm)
             print("\n" + "=" * 65)
-            print("📦 Extension Backup Bundles Built Successfully:")
+            print("Extension Backup Bundles Built Successfully:")
             print(f"  • Stylus JSON:         {args.out_stylus} ({styles_cnt} styles bundled)")
             print(f"  • Violentmonkey ZIP:   {args.out_vm} ({vm_cnt} scripts bundled)")
             print("-" * 65)
-            print("💡 In Stylus: Manage -> Import -> select JSON")
-            print("💡 In Violentmonkey: Settings -> Import from zip -> select ZIP")
+            print("In Stylus: Manage -> Import -> select JSON")
+            print("In Violentmonkey: Settings -> Import from zip -> select ZIP")
             print("=" * 65 + "\n")
 
         elif action == "serve":
@@ -1116,9 +1124,9 @@ def main() -> None:
                 st = runner.ext_find_style(args.target)
                 status_label = "Enabled" if enable else "Disabled"
                 name = st["name"] if st else args.target
-                print(f"\n✅ Style successfully {status_label}: {name} (ID: {st['id'] if st else '?'})\n")
+                print(f"\nStyle successfully {status_label}: {name} (ID: {st['id'] if st else '?'})\n")
             else:
-                print(f"\n❌ Style not found: {args.target}\n", file=sys.stderr)
+                print(f"\nStyle not found: {args.target}\n", file=sys.stderr)
                 sys.exit(1)
 
         elif action == "toggle-style":
@@ -1127,9 +1135,9 @@ def main() -> None:
                 st = runner.ext_find_style(args.target)
                 status_label = "Enabled" if st and st["enabled"] else "Disabled"
                 name = st["name"] if st else args.target
-                print(f"\n🔄 Style toggled to {status_label}: {name} (ID: {st['id'] if st else '?'})\n")
+                print(f"\nStyle toggled to {status_label}: {name} (ID: {st['id'] if st else '?'})\n")
             else:
-                print(f"\n❌ Style not found: {args.target}\n", file=sys.stderr)
+                print(f"\nStyle not found: {args.target}\n", file=sys.stderr)
                 sys.exit(1)
 
         elif action == "delete-style":
@@ -1137,9 +1145,9 @@ def main() -> None:
             ok = runner.ext_delete_style(args.target)
             if ok:
                 name = st["name"] if st else args.target
-                print(f"\n🗑️ Style successfully deleted from Stylus: {name}\n")
+                print(f"\nStyle successfully deleted from Stylus: {name}\n")
             else:
-                print(f"\n❌ Style not found: {args.target}\n", file=sys.stderr)
+                print(f"\nStyle not found: {args.target}\n", file=sys.stderr)
                 sys.exit(1)
 
         elif action == "install-style":
@@ -1154,9 +1162,9 @@ def main() -> None:
                 sc = runner.ext_find_script(args.target)
                 status_label = "Enabled" if enable else "Disabled"
                 name = sc["name"] if sc else args.target
-                print(f"\n✅ Script successfully {status_label}: {name} (ID: {sc['id'] if sc else '?'})\n")
+                print(f"\nScript successfully {status_label}: {name} (ID: {sc['id'] if sc else '?'})\n")
             else:
-                print(f"\n❌ Script not found: {args.target}\n", file=sys.stderr)
+                print(f"\nScript not found: {args.target}\n", file=sys.stderr)
                 sys.exit(1)
 
         elif action == "toggle-script":
@@ -1165,9 +1173,9 @@ def main() -> None:
                 sc = runner.ext_find_script(args.target)
                 status_label = "Enabled" if sc and sc["enabled"] else "Disabled"
                 name = sc["name"] if sc else args.target
-                print(f"\n🔄 Script toggled to {status_label}: {name} (ID: {sc['id'] if sc else '?'})\n")
+                print(f"\nScript toggled to {status_label}: {name} (ID: {sc['id'] if sc else '?'})\n")
             else:
-                print(f"\n❌ Script not found: {args.target}\n", file=sys.stderr)
+                print(f"\nScript not found: {args.target}\n", file=sys.stderr)
                 sys.exit(1)
 
         elif action == "delete-script":
@@ -1175,9 +1183,9 @@ def main() -> None:
             ok = runner.ext_delete_script(args.target)
             if ok:
                 name = sc["name"] if sc else args.target
-                print(f"\n🗑️ Script successfully deleted from Violentmonkey: {name}\n")
+                print(f"\nScript successfully deleted from Violentmonkey: {name}\n")
             else:
-                print(f"\n❌ Script not found: {args.target}\n", file=sys.stderr)
+                print(f"\nScript not found: {args.target}\n", file=sys.stderr)
                 sys.exit(1)
 
         elif action == "install-script":

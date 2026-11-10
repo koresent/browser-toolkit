@@ -15,11 +15,11 @@ class TestParser(unittest.TestCase):
     def test_parse_userstyle_full_metadata_and_sections(self):
         sample_css = """/* ==UserStyle==
 @name         Habr Gruvbox Dark
-@namespace    github.com/koresent/userstyles
+@namespace    example.com/userstyles
 @version      2.1.0
 @description  Comprehensive dark theme for Habr
-@author       Koresent
-@homepageURL  https://github.com/koresent/userstyles
+@author       TestAuthor
+@homepageURL  https://example.com/userstyles
 @license      MIT
 ==/UserStyle== */
 
@@ -54,11 +54,11 @@ class TestParser(unittest.TestCase):
         try:
             info = parse_userstyle(f_path)
             self.assertEqual(info.name, "Habr Gruvbox Dark")
-            self.assertEqual(info.namespace, "github.com/koresent/userstyles")
+            self.assertEqual(info.namespace, "example.com/userstyles")
             self.assertEqual(info.version, "2.1.0")
             self.assertEqual(info.description, "Comprehensive dark theme for Habr")
-            self.assertEqual(info.author, "Koresent")
-            self.assertEqual(info.homepage_url, "https://github.com/koresent/userstyles")
+            self.assertEqual(info.author, "TestAuthor")
+            self.assertEqual(info.homepage_url, "https://example.com/userstyles")
             self.assertEqual(len(info.sections), 2)
 
             sec1 = info.sections[0]
@@ -116,10 +116,10 @@ body { background: black; color: white; }
     def test_parse_userscript_metadata_and_url_derivation(self):
         sample_js = """// ==UserScript==
 // @name         YouTube Enhancer
-// @namespace    https://github.com/koresent
+// @namespace    https://example.com/scripts
 // @version      3.4.1
 // @description  Custom controls and keybindings for YouTube
-// @author       Koresent
+// @author       TestAuthor
 // @match        *://*.youtube.com/*
 // @include      https://youtube.com/watch*
 // @grant        GM_setValue
@@ -136,10 +136,10 @@ console.log("YouTube script active");
         try:
             info = parse_userscript(f_path)
             self.assertEqual(info.name, "YouTube Enhancer")
-            self.assertEqual(info.namespace, "https://github.com/koresent")
+            self.assertEqual(info.namespace, "https://example.com/scripts")
             self.assertEqual(info.version, "3.4.1")
             self.assertEqual(info.description, "Custom controls and keybindings for YouTube")
-            self.assertEqual(info.author, "Koresent")
+            self.assertEqual(info.author, "TestAuthor")
             self.assertEqual(info.run_at, "document-start")
             self.assertIn("*://*.youtube.com/*", info.matches)
             self.assertIn("https://youtube.com/watch*", info.includes)

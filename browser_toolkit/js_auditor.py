@@ -61,7 +61,7 @@ def inject_userscript(
     result = JSAuditResult()
     setup_js_listeners(page, result)
 
-    # 1. Attach GM shim and DOM mutation observer to future navigations and current document
+    # Attach GM shim and DOM mutation observer
     page.add_init_script(GM_FULL_SHIM_JS)
     attach_mutation_tracker(page)
     try:
@@ -87,14 +87,12 @@ def inject_userscript(
     if settle_ms > 0:
         page.wait_for_timeout(settle_ms)
 
-    # 2. Extract registered menu commands
     try:
         cmds = page.evaluate("() => Object.keys(window._gm_commands || {})")
         result.registered_commands = cmds
     except Exception:
         pass
 
-    # 3. If command invocation requested, trigger it
     if invoke_command:
         try:
             cmd_res = page.evaluate(
@@ -109,21 +107,18 @@ def inject_userscript(
             result.command_invocation_result = {"success": False, "error": str(e)}
             result.errors.append(f"Failed to invoke command '{invoke_command}': {e}")
 
-    # 4. Extract network requests
     try:
         net_log = page.evaluate("() => window._gm_network_log || []")
         result.network_requests = net_log
     except Exception:
         pass
 
-    # 5. Extract clipboard & notifications
     try:
         result.clipboard_log = page.evaluate("() => window._gm_clipboard_log || []")
         result.notifications_log = page.evaluate("() => window._gm_notifications_log || []")
     except Exception:
         pass
 
-    # 6. Extract DOM mutations
     result.mutations = collect_dom_mutations(page)
 
     return result

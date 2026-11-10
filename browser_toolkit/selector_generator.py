@@ -31,7 +31,6 @@ JS_SELECTOR_SYNTHESIZER = r"""
         const candidates = [];
         const tag = el.tagName.toLowerCase();
 
-        // 1. Data attributes (often most stable in modern apps)
         for (const attr of ['data-testid', 'data-test', 'data-component', 'data-id', 'data-target', 'data-name']) {
             const val = el.getAttribute(attr);
             if (val) {
@@ -40,13 +39,11 @@ JS_SELECTOR_SYNTHESIZER = r"""
             }
         }
 
-        // 2. Stable ID
         if (isStableId(el.id)) {
             candidates.push(`#${CSS.escape(el.id)}`);
             candidates.push(`${tag}#${CSS.escape(el.id)}`);
         }
 
-        // 3. ARIA attributes & Role
         const role = el.getAttribute('role');
         const ariaLabel = el.getAttribute('aria-label');
         if (role && ariaLabel) {
@@ -59,14 +56,13 @@ JS_SELECTOR_SYNTHESIZER = r"""
             candidates.push(`${tag}[role="${role}"]`);
         }
 
-        // 4. Stable class name combinations
         const stableClasses = getStableClasses(el);
         for (const c of stableClasses.slice(0, 3)) {
             candidates.push(`.${CSS.escape(c)}`);
             candidates.push(`${tag}.${CSS.escape(c)}`);
         }
 
-        // 5. CSS Module prefix matcher (e.g. div[class*="CopilotItems-module__"])
+        // Match stable CSS module prefix without the randomized hash suffix
         if (typeof el.className === 'string') {
             const moduleMatches = el.className.match(/([a-zA-Z0-9]+-module)__[a-zA-Z0-9_-]+/g);
             if (moduleMatches) {
@@ -78,7 +74,6 @@ JS_SELECTOR_SYNTHESIZER = r"""
             }
         }
 
-        // 6. Hierarchy with parent if candidate isn't unique
         if (el.parentElement && el.parentElement !== document.body) {
             const p = el.parentElement;
             const pTag = p.tagName.toLowerCase();

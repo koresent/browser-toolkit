@@ -25,23 +25,16 @@ class SPAResilienceReport:
 
 JS_TRIGGER_SPA_EVENTS = r"""
 (newUrl) => {
-    // 1. Update browser history
     history.pushState({}, '', newUrl);
 
-    // 2. Dispatch standard popstate & hashchange
     window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
     window.dispatchEvent(new HashChangeEvent('hashchange'));
 
-    // 3. Dispatch framework-specific SPA events
-    // Turbo (GitHub, Basecamp)
+    // Framework-specific SPA lifecycle events (Turbo, YouTube, PJAX)
     document.dispatchEvent(new CustomEvent('turbo:load', { bubbles: true }));
     document.dispatchEvent(new CustomEvent('turbo:render', { bubbles: true }));
-
-    // YouTube
     window.dispatchEvent(new CustomEvent('yt-navigate-finish', { bubbles: true }));
     document.dispatchEvent(new CustomEvent('yt-page-data-updated', { bubbles: true }));
-
-    // PJAX (Legacy GitHub, etc.)
     document.dispatchEvent(new CustomEvent('pjax:end', { bubbles: true }));
 }
 """
@@ -58,15 +51,12 @@ def check_spa_resilience(
     if initial_url and page.url != initial_url:
         page.goto(initial_url, wait_until="domcontentloaded", timeout=30000)
 
-    # 1. Inject script on initial page
     audit_initial = inject_userscript(page, raw_js, run_at=run_at, settle_ms=600)
     initial_selectors = [n.selector for n in audit_initial.mutations.added_nodes if n.selector]
 
-    # 2. Trigger SPA transition
     page.evaluate(JS_TRIGGER_SPA_EVENTS, target_spa_url)
     page.wait_for_timeout(800)
 
-    # 3. Check which injected selectors are still in DOM
     retained = []
     lost = []
     for sel in initial_selectors:
