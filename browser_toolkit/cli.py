@@ -143,6 +143,114 @@ def print_scan_summary(data: Dict[str, Any]) -> None:
     print("=" * 70 + "\n")
 
 
+def print_responsive_summary(report: Dict[str, Any]) -> None:
+    print("\n" + "=" * 70)
+    print(f"📱 Responsive Layout Audit: {report.get('url')}")
+    print(f"Status: {'⚠️ Potential Issues Found' if report.get('has_any_issues') else '✅ Perfect Responsive Layout'}")
+    print("=" * 70)
+
+    for vp in report.get("viewports", []):
+        w, h = vp.get("viewport", [0, 0])
+        label = vp.get("label", f"{w}x{h}")
+        has_h_overflow = vp.get("has_horizontal_overflow", False)
+        doc_w = vp.get("page_scroll_width", 0)
+        win_w = vp.get("viewport_width", w)
+        overflow_els = vp.get("overflow_elements", [])
+        touch_issues = vp.get("touch_target_issues", [])
+        text_issues = vp.get("text_clipping_issues", [])
+        sticky_issues = vp.get("sticky_coverage_issues", [])
+
+        status_icon = "❌" if has_h_overflow or len(touch_issues) > 3 else ("⚠️" if (touch_issues or text_issues or sticky_issues) else "✅")
+        print(f"\n[{status_icon}] Viewport: {label}")
+        print("-" * 50)
+
+        if has_h_overflow:
+            print(f"  ❌ HORIZONTAL OVERFLOW DETECTED: Page width {doc_w}px exceeds viewport {win_w}px (diff: +{doc_w - win_w}px)")
+            print("     Elements causing layout blowout:")
+            for el in overflow_els[:5]:
+                print(f"       • <{el['tag_name']}> {el['selector']} (overflow: +{el['overflow_px']}px)")
+                if el.get("text_snippet"):
+                    print(f"         Text: \"{el['text_snippet']}\"")
+                styles = el.get("computed_styles", {})
+                print(f"         CSS: width={styles.get('width')}, max-width={styles.get('maxWidth')}, overflow-x={styles.get('overflowX')}")
+        else:
+            print(f"  ✅ No horizontal scroll (Page width fits within {win_w}px)")
+
+        if touch_issues:
+            print(f"  ⚠️ Touch targets < 24x24px ({len(touch_issues)} found):")
+            for t in touch_issues[:4]:
+                snippet = f" (\"{t['text_snippet']}\")" if t.get("text_snippet") else ""
+                print(f"       • {t['selector']} [{t['width']}x{t['height']}px]{snippet}")
+
+        if text_issues:
+            print(f"  ⚠️ Text clipping / cut-off ({len(text_issues)} found):")
+            for tc in text_issues[:3]:
+                print(f"       • {tc['selector']} (scrollWidth: {tc['scroll_width']}px > clientWidth: {tc['client_width']}px) \"{tc['text_snippet']}\"")
+
+        if sticky_issues:
+            print(f"  ⚠️ Large Fixed/Sticky screen coverage ({len(sticky_issues)} found):")
+            for sc in sticky_issues[:2]:
+                print(f"       • {sc['selector']} covers {sc['height_ratio_pct']}% of screen height ({sc['position']})")
+
+        if vp.get("screenshot_path"):
+            print(f"  📸 Screenshot: {vp['screenshot_path']}")
+
+    print("\n" + "=" * 70 + "\n")
+
+
+def print_theme_flaws_summary(report: Dict[str, Any]) -> None:
+    mode = report.get("theme_mode", "dark").upper()
+    bleed = report.get("bleedthrough_issues", [])
+    invis_text = report.get("invisible_text_issues", [])
+    inputs = report.get("unstyled_input_issues", [])
+    icons = report.get("invisible_icon_issues", [])
+    has_scrollbar = report.get("has_custom_scrollbar", False)
+    total_checked = report.get("total_elements_checked", 0)
+
+    print("\n" + "=" * 70)
+    print(f"🎨 Theme Quality & Visual Flaw Audit: {report.get('url')} (Mode: {mode})")
+    print(f"Checked DOM Elements: {total_checked}")
+    print("-" * 70)
+
+    if bleed:
+        print(f"\n❌ Unstyled Bleedthrough Containers ({len(bleed)} found):")
+        for b in bleed[:8]:
+            snippet = f" (\"{b['text_snippet']}\")" if b.get("text_snippet") else ""
+            print(f"  • {b['selector']} [{b['bounds']['width']}x{b['bounds']['height']}px] -> {b['color']}{snippet}")
+        if len(bleed) > 8:
+            print(f"    ... and {len(bleed) - 8} more bright containers.")
+
+    if invis_text:
+        print(f"\n❌ Invisible / Blended Text ({len(invis_text)} found):")
+        for t in invis_text[:8]:
+            print(f"  • {t['selector']}: \"{t['text']}\"")
+            print(f"    Ratio: {t['contrast_ratio']}:1 | color: {t['color']} on bg: {t['bg_color']}")
+        if len(invis_text) > 8:
+            print(f"    ... and {len(invis_text) - 8} more low-contrast text elements.")
+
+    if inputs:
+        print(f"\n⚠️ Unstyled / Broken Form Inputs ({len(inputs)} found):")
+        for inp in inputs[:6]:
+            print(f"  • <{inp['tag_name']} type=\"{inp['input_type']}\"> {inp['selector']}")
+            print(f"    Issue: {inp['description']} (bg: {inp['bg_color']}, color: {inp['text_color']})")
+
+    if icons:
+        print(f"\n⚠️ Hidden / Low-Contrast SVG Icons ({len(icons)} found):")
+        for ic in icons[:5]:
+            print(f"  • {ic['selector']} ({ic['fill_or_stroke']} against {ic['parent_bg']}, ratio: {ic['contrast_ratio']}:1)")
+
+    scrollbar_str = "✅ Custom scrollbar applied" if has_scrollbar else "⚠️ Native default scrollbars (consider adding scrollbar-color: #504945 #282828)"
+    print(f"\nScrollbar: {scrollbar_str}")
+
+    if not (bleed or invis_text or inputs or icons):
+        if has_scrollbar:
+            print("\n🎉 Flawless! No bleedthrough, invisible text, or broken form inputs detected.")
+        else:
+            print("\n🎉 Colors & contrast are clean! No bleedthrough, invisible text, or broken form inputs detected.")
+
+    print("=" * 70 + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="browser-toolkit",
@@ -270,6 +378,27 @@ def main() -> None:
     extract_colors_parser.add_argument("--output", help="Path to write output CSS skeleton")
     extract_colors_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     extract_colors_parser.add_argument("--profile", help="Path to custom profile")
+
+    # Command: check-responsive
+    resp_parser = subparsers.add_parser("check-responsive", help="Audit responsive layout (horizontal overflow, touch targets, text clipping)")
+    resp_parser.add_argument("url", help="Target URL")
+    resp_parser.add_argument("--css", help="Optional path to .user.css to apply before testing")
+    resp_parser.add_argument("--viewports", help="Comma-separated viewports, e.g. '390x844,768x1024,1440x900'")
+    resp_parser.add_argument("--screenshots-dir", help="Directory to save viewport screenshots")
+    resp_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    resp_parser.add_argument("--profile", help="Path to custom profile")
+    resp_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    resp_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: check-theme
+    theme_parser = subparsers.add_parser("check-theme", help="Audit theme flaws (bright bleedthrough, invisible text, unstyled inputs, hidden SVGs)")
+    theme_parser.add_argument("url", help="Target URL")
+    theme_parser.add_argument("--css", help="Optional path to .user.css to apply before testing")
+    theme_parser.add_argument("--theme", choices=["dark", "light"], default="dark", help="Expected theme palette mode (default: dark)")
+    theme_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    theme_parser.add_argument("--profile", help="Path to custom profile")
+    theme_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    theme_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
@@ -516,6 +645,40 @@ def main() -> None:
             print("-" * 60)
             print(res[:2000] + ("\n... [truncated]" if len(res) > 2000 else ""))
             print("=" * 60 + "\n")
+
+    elif args.command == "check-responsive":
+        viewports_list = None
+        if getattr(args, "viewports", None):
+            viewports_list = []
+            for item in args.viewports.split(","):
+                item = item.strip()
+                if not item:
+                    continue
+                if "x" in item:
+                    parts = item.split("x")
+                    viewports_list.append((int(parts[0]), int(parts[1]), f"Custom ({item})"))
+
+        data = runner.check_responsive(
+            url=args.url,
+            css_path=getattr(args, "css", None),
+            viewports=viewports_list,
+            screenshot_dir=getattr(args, "screenshots_dir", None),
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print_responsive_summary(data)
+
+    elif args.command == "check-theme":
+        data = runner.check_theme(
+            url=args.url,
+            target_theme=getattr(args, "theme", "dark"),
+            css_path=getattr(args, "css", None),
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print_theme_flaws_summary(data)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from playwright.sync_api import sync_playwright
 
 from .profile import ZenProfileContext
@@ -19,6 +19,8 @@ from .palette_extractor import extract_site_palette
 from .contrast_checker import check_page_contrast
 from .preview import run_live_preview
 from .css_color_extractor import extract_colors_from_file_or_url
+from .responsive_checker import ResponsiveChecker
+from .theme_flaw_checker import ThemeFlawChecker
 
 
 class AuditorRunner:
@@ -600,3 +602,178 @@ class AuditorRunner:
             screenshot_on_change=screenshot,
             output_screenshot=output_screenshot,
         )
+
+    def check_responsive(
+        self,
+        url: str,
+        css_path: Optional[str | Path] = None,
+        viewports: Optional[List[Tuple[int, int, str]]] = None,
+        screenshot_dir: Optional[str | Path] = None,
+    ) -> Dict[str, Any]:
+        css_content = None
+        if css_path:
+            info = parse_userstyle(css_path)
+            css_content = info.get_combined_css_for_url(url)
+
+        checker = ResponsiveChecker(viewports=viewports, custom_css=css_content)
+
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context()
+                    page = context.new_page()
+
+                try:
+                    s_dir = Path(screenshot_dir) if screenshot_dir else None
+                    report = checker.audit(page, url=url, screenshot_dir=s_dir)
+
+                    return {
+                        "url": report.url,
+                        "has_any_issues": report.has_any_issues,
+                        "viewports": [
+                            {
+                                "viewport": list(r.viewport),
+                                "label": r.label,
+                                "has_horizontal_overflow": r.has_horizontal_overflow,
+                                "page_scroll_width": r.page_scroll_width,
+                                "viewport_width": r.viewport_width,
+                                "overflow_elements": [
+                                    {
+                                        "selector": e.selector,
+                                        "tag_name": e.tag_name,
+                                        "class_name": e.class_name,
+                                        "overflow_px": e.overflow_px,
+                                        "bounds": e.bounds,
+                                        "computed_styles": e.computed_styles,
+                                        "text_snippet": e.text_snippet,
+                                    }
+                                    for e in r.overflow_elements
+                                ],
+                                "touch_target_issues": [
+                                    {
+                                        "selector": t.selector,
+                                        "tag_name": t.tag_name,
+                                        "width": t.width,
+                                        "height": t.height,
+                                        "text_snippet": t.text_snippet,
+                                    }
+                                    for t in r.touch_target_issues
+                                ],
+                                "text_clipping_issues": [
+                                    {
+                                        "selector": tc.selector,
+                                        "tag_name": tc.tag_name,
+                                        "scroll_width": tc.scroll_width,
+                                        "client_width": tc.client_width,
+                                        "text_snippet": tc.text_snippet,
+                                    }
+                                    for tc in r.text_clipping_issues
+                                ],
+                                "sticky_coverage_issues": [
+                                    {
+                                        "selector": sc.selector,
+                                        "position": sc.position,
+                                        "height_ratio_pct": sc.height_ratio_pct,
+                                        "bounds": sc.bounds,
+                                    }
+                                    for sc in r.sticky_coverage_issues
+                                ],
+                                "screenshot_path": r.screenshot_path,
+                            }
+                            for r in report.results
+                        ],
+                    }
+                finally:
+                    context.close()
+
+    def check_theme(
+        self,
+        url: str,
+        target_theme: str = "dark",
+        css_path: Optional[str | Path] = None,
+    ) -> Dict[str, Any]:
+        css_content = None
+        if css_path:
+            info = parse_userstyle(css_path)
+            css_content = info.get_combined_css_for_url(url)
+
+        checker = ThemeFlawChecker(target_theme=target_theme, custom_css=css_content)
+
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    report = checker.audit(page, url=url)
+                    return {
+                        "url": report.url,
+                        "theme_mode": report.theme_mode,
+                        "has_any_issues": report.has_any_issues,
+                        "has_custom_scrollbar": report.has_custom_scrollbar,
+                        "total_elements_checked": report.total_elements_checked,
+                        "bleedthrough_issues": [
+                            {
+                                "selector": b.selector,
+                                "tag_name": b.tag_name,
+                                "property_name": b.property_name,
+                                "color": b.color,
+                                "bounds": b.bounds,
+                                "text_snippet": b.text_snippet,
+                            }
+                            for b in report.bleedthrough_issues
+                        ],
+                        "invisible_text_issues": [
+                            {
+                                "selector": t.selector,
+                                "tag_name": t.tag_name,
+                                "text": t.text,
+                                "color": t.color,
+                                "bg_color": t.bg_color,
+                                "contrast_ratio": t.contrast_ratio,
+                            }
+                            for t in report.invisible_text_issues
+                        ],
+                        "unstyled_input_issues": [
+                            {
+                                "selector": u.selector,
+                                "tag_name": u.tag_name,
+                                "input_type": u.input_type,
+                                "bg_color": u.bg_color,
+                                "text_color": u.text_color,
+                                "contrast_ratio": u.contrast_ratio,
+                                "description": u.description,
+                            }
+                            for u in report.unstyled_input_issues
+                        ],
+                        "invisible_icon_issues": [
+                            {
+                                "selector": ic.selector,
+                                "tag_name": ic.tag_name,
+                                "fill_or_stroke": ic.fill_or_stroke,
+                                "parent_bg": ic.parent_bg,
+                                "contrast_ratio": ic.contrast_ratio,
+                            }
+                            for ic in report.invisible_icon_issues
+                        ],
+                    }
+                finally:
+                    context.close()
