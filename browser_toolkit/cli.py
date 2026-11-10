@@ -604,6 +604,58 @@ def main() -> None:
     serve_p.add_argument("--scripts-dir", help="Custom userscripts directory")
     serve_p.add_argument("--profile", help="Path to custom profile")
 
+    # ext enable-style
+    en_style_p = ext_subparsers.add_parser("enable-style", help="Enable an installed Stylus style by ID or name")
+    en_style_p.add_argument("target", help="Numeric ID or style name")
+    en_style_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext disable-style
+    dis_style_p = ext_subparsers.add_parser("disable-style", help="Disable an installed Stylus style by ID or name")
+    dis_style_p.add_argument("target", help="Numeric ID or style name")
+    dis_style_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext toggle-style
+    tog_style_p = ext_subparsers.add_parser("toggle-style", help="Toggle an installed Stylus style on/off")
+    tog_style_p.add_argument("target", help="Numeric ID or style name")
+    tog_style_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext delete-style
+    del_style_p = ext_subparsers.add_parser("delete-style", help="Delete an installed style from Stylus DB")
+    del_style_p.add_argument("target", help="Numeric ID or style name")
+    del_style_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext install-style
+    inst_style_p = ext_subparsers.add_parser("install-style", help="Install or update a .user.css file in Stylus DB")
+    inst_style_p.add_argument("file", help="Path to .user.css file")
+    inst_style_p.add_argument("--disabled", action="store_true", help="Install as disabled")
+    inst_style_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext enable-script
+    en_script_p = ext_subparsers.add_parser("enable-script", help="Enable an installed Violentmonkey script by ID or name")
+    en_script_p.add_argument("target", help="Numeric ID or script name")
+    en_script_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext disable-script
+    dis_script_p = ext_subparsers.add_parser("disable-script", help="Disable an installed Violentmonkey script by ID or name")
+    dis_script_p.add_argument("target", help="Numeric ID or script name")
+    dis_script_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext toggle-script
+    tog_script_p = ext_subparsers.add_parser("toggle-script", help="Toggle an installed Violentmonkey script on/off")
+    tog_script_p.add_argument("target", help="Numeric ID or script name")
+    tog_script_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext delete-script
+    del_script_p = ext_subparsers.add_parser("delete-script", help="Delete an installed script from Violentmonkey DB")
+    del_script_p.add_argument("target", help="Numeric ID or script name")
+    del_script_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext install-script
+    inst_script_p = ext_subparsers.add_parser("install-script", help="Install or update a .user.js file in Violentmonkey DB")
+    inst_script_p.add_argument("file", help="Path to .user.js file")
+    inst_script_p.add_argument("--disabled", action="store_true", help="Install as disabled")
+    inst_script_p.add_argument("--profile", help="Path to custom profile")
+
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
 
@@ -1051,6 +1103,82 @@ def main() -> None:
                 styles_dir=getattr(args, "styles_dir", None),
                 scripts_dir=getattr(args, "scripts_dir", None),
             )
+
+        elif action in ("enable-style", "disable-style"):
+            enable = action == "enable-style"
+            ok = runner.ext_set_style_enabled(args.target, enable)
+            if ok:
+                st = runner.ext_find_style(args.target)
+                status_label = "Enabled" if enable else "Disabled"
+                name = st["name"] if st else args.target
+                print(f"\n✅ Style successfully {status_label}: {name} (ID: {st['id'] if st else '?'})\n")
+            else:
+                print(f"\n❌ Style not found: {args.target}\n", file=sys.stderr)
+                sys.exit(1)
+
+        elif action == "toggle-style":
+            ok = runner.ext_toggle_style(args.target)
+            if ok:
+                st = runner.ext_find_style(args.target)
+                status_label = "Enabled" if st and st["enabled"] else "Disabled"
+                name = st["name"] if st else args.target
+                print(f"\n🔄 Style toggled to {status_label}: {name} (ID: {st['id'] if st else '?'})\n")
+            else:
+                print(f"\n❌ Style not found: {args.target}\n", file=sys.stderr)
+                sys.exit(1)
+
+        elif action == "delete-style":
+            st = runner.ext_find_style(args.target)
+            ok = runner.ext_delete_style(args.target)
+            if ok:
+                name = st["name"] if st else args.target
+                print(f"\n🗑️ Style successfully deleted from Stylus: {name}\n")
+            else:
+                print(f"\n❌ Style not found: {args.target}\n", file=sys.stderr)
+                sys.exit(1)
+
+        elif action == "install-style":
+            res = runner.ext_install_or_update_style(args.file, enabled=not args.disabled)
+            act = "Updated" if res["action"] == "updated" else "Installed"
+            print(f"\n✨ Style successfully {act} in Stylus: {res['name']} (ID: {res['id']}, Status: {'Enabled' if res['enabled'] else 'Disabled'})\n")
+
+        elif action in ("enable-script", "disable-script"):
+            enable = action == "enable-script"
+            ok = runner.ext_set_script_enabled(args.target, enable)
+            if ok:
+                sc = runner.ext_find_script(args.target)
+                status_label = "Enabled" if enable else "Disabled"
+                name = sc["name"] if sc else args.target
+                print(f"\n✅ Script successfully {status_label}: {name} (ID: {sc['id'] if sc else '?'})\n")
+            else:
+                print(f"\n❌ Script not found: {args.target}\n", file=sys.stderr)
+                sys.exit(1)
+
+        elif action == "toggle-script":
+            ok = runner.ext_toggle_script(args.target)
+            if ok:
+                sc = runner.ext_find_script(args.target)
+                status_label = "Enabled" if sc and sc["enabled"] else "Disabled"
+                name = sc["name"] if sc else args.target
+                print(f"\n🔄 Script toggled to {status_label}: {name} (ID: {sc['id'] if sc else '?'})\n")
+            else:
+                print(f"\n❌ Script not found: {args.target}\n", file=sys.stderr)
+                sys.exit(1)
+
+        elif action == "delete-script":
+            sc = runner.ext_find_script(args.target)
+            ok = runner.ext_delete_script(args.target)
+            if ok:
+                name = sc["name"] if sc else args.target
+                print(f"\n🗑️ Script successfully deleted from Violentmonkey: {name}\n")
+            else:
+                print(f"\n❌ Script not found: {args.target}\n", file=sys.stderr)
+                sys.exit(1)
+
+        elif action == "install-script":
+            res = runner.ext_install_or_update_script(args.file, enabled=not args.disabled)
+            act = "Updated" if res["action"] == "updated" else "Installed"
+            print(f"\n✨ Script successfully {act} in Violentmonkey: {res['name']} (ID: {res['id']}, Status: {'Enabled' if res['enabled'] else 'Disabled'})\n")
 
 
 if __name__ == "__main__":

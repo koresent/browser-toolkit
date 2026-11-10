@@ -21,6 +21,8 @@ class UserStyleInfo:
     version: str = ""
     description: str = ""
     homepage_url: str = ""
+    author: str = ""
+    namespace: str = ""
     sections: List[StyleSection] = field(default_factory=list)
     raw_css: str = ""
 
@@ -100,6 +102,8 @@ class UserScriptInfo:
     name: str = ""
     version: str = ""
     description: str = ""
+    author: str = ""
+    namespace: str = ""
     matches: List[str] = field(default_factory=list)
     includes: List[str] = field(default_factory=list)
     grants: List[str] = field(default_factory=list)
@@ -139,8 +143,16 @@ def parse_userstyle(filepath: str | Path) -> UserStyleInfo:
                 info.version = m.group(1).strip()
             elif m := re.match(r"^@description\s+(.+)$", line):
                 info.description = m.group(1).strip()
+            elif m := re.match(r"^@author\s+(.+)$", line):
+                info.author = m.group(1).strip()
+            elif m := re.match(r"^@namespace\s+(.+)$", line):
+                info.namespace = m.group(1).strip()
             elif m := re.match(r"^@homepageURL\s+(.+)$", line):
                 info.homepage_url = m.group(1).strip()
+            elif m := re.match(r"^@author\s+(.+)$", line):
+                info.author = m.group(1).strip()
+            elif m := re.match(r"^@namespace\s+(.+)$", line):
+                info.namespace = m.group(1).strip()
 
     # Parse @-moz-document blocks
     # Handle nested braces inside @-moz-document
@@ -205,6 +217,10 @@ def parse_userscript(filepath: str | Path) -> UserScriptInfo:
                 info.version = m.group(1).strip()
             elif m := re.match(r"^@description\s+(.+)$", line):
                 info.description = m.group(1).strip()
+            elif m := re.match(r"^@author\s+(.+)$", line):
+                info.author = m.group(1).strip()
+            elif m := re.match(r"^@namespace\s+(.+)$", line):
+                info.namespace = m.group(1).strip()
             elif m := re.match(r"^@match\s+(.+)$", line):
                 info.matches.append(m.group(1).strip())
             elif m := re.match(r"^@include\s+(.+)$", line):

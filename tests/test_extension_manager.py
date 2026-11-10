@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -71,6 +72,101 @@ class TestExtensionManager(unittest.TestCase):
                 count = self.mgr.build_violentmonkey_backup_zip(scripts_dir, zip_out)
                 self.assertGreater(count, 0)
                 self.assertTrue(zip_out.exists())
+
+    def test_stylus_mutations(self):
+        """Tests enabling, disabling, installing, updating, and deleting Stylus styles on isolated copy."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            shutil.copy2(self.mgr.profile_dir / "prefs.js", tmp / "prefs.js")
+            shutil.copytree(self.mgr.profile_dir / "storage", tmp / "storage")
+
+            tmp_mgr = ExtensionManager(profile_path=tmp)
+            styles = tmp_mgr.list_styles()
+            self.assertGreater(len(styles), 0)
+            sample = styles[0]
+
+            # Toggle off
+            self.assertTrue(tmp_mgr.set_style_enabled(sample.id, False))
+            updated = tmp_mgr.find_style(sample.id)
+            self.assertIsNotNone(updated)
+            self.assertFalse(updated.enabled)
+
+            # Toggle on
+            self.assertTrue(tmp_mgr.toggle_style(sample.id))
+            updated = tmp_mgr.find_style(sample.id)
+            self.assertTrue(updated.enabled)
+
+            # Install new style
+            test_css = tmp / "custom.user.css"
+            test_css.write_text(
+                "/* ==UserStyle==\n@name Unit Test Gruvbox\n@version 1.0.0\n==/UserStyle== */\n@-moz-document domain(\"unit.test\") { body { color: #ebdbb2; } }"
+            )
+            res = tmp_mgr.install_or_update_style(test_css, enabled=True)
+            self.assertEqual(res["action"], "created")
+            new_style = tmp_mgr.find_style("Unit Test Gruvbox")
+            self.assertIsNotNone(new_style)
+            self.assertEqual(new_style.id, res["id"])
+
+            # Update existing style
+            test_css.write_text(
+                "/* ==UserStyle==\n@name Unit Test Gruvbox\n@version 2.0.0\n==/UserStyle== */\n@-moz-document domain(\"unit.test\") { body { color: #fbf1c7; } }"
+            )
+            res_up = tmp_mgr.install_or_update_style(test_css, enabled=False)
+            self.assertEqual(res_up["action"], "updated")
+            updated_style = tmp_mgr.find_style("Unit Test Gruvbox")
+            self.assertFalse(updated_style.enabled)
+
+            # Delete style
+            self.assertTrue(tmp_mgr.delete_style(res["id"]))
+            self.assertIsNone(tmp_mgr.find_style("Unit Test Gruvbox"))
+
+    def test_violentmonkey_mutations(self):
+        """Tests enabling, disabling, installing, updating, and deleting Violentmonkey scripts on isolated copy."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            shutil.copy2(self.mgr.profile_dir / "prefs.js", tmp / "prefs.js")
+            shutil.copytree(self.mgr.profile_dir / "storage", tmp / "storage")
+
+            tmp_mgr = ExtensionManager(profile_path=tmp)
+            scripts = tmp_mgr.list_scripts()
+            self.assertGreater(len(scripts), 0)
+            sample = scripts[0]
+
+            # Toggle off
+            self.assertTrue(tmp_mgr.set_script_enabled(sample.id, False))
+            updated = tmp_mgr.find_script(sample.id)
+            self.assertIsNotNone(updated)
+            self.assertFalse(updated.enabled)
+
+            # Toggle on
+            self.assertTrue(tmp_mgr.toggle_script(sample.id))
+            updated = tmp_mgr.find_script(sample.id)
+            self.assertTrue(updated.enabled)
+
+            # Install new script
+            test_js = tmp / "custom.user.js"
+            test_js.write_text(
+                "// ==UserScript==\n// @name Unit Test Script\n// @version 1.0.0\n// @match *://unit.test/*\n// ==/UserScript==\nconsole.log(\"Hello test\");"
+            )
+            res = tmp_mgr.install_or_update_script(test_js, enabled=True)
+            self.assertEqual(res["action"], "created")
+            new_script = tmp_mgr.find_script("Unit Test Script")
+            self.assertIsNotNone(new_script)
+            self.assertIn("Hello test", new_script.code)
+
+            # Update existing script
+            test_js.write_text(
+                "// ==UserScript==\n// @name Unit Test Script\n// @version 2.0.0\n// @match *://unit.test/*\n// ==/UserScript==\nconsole.log(\"Updated test\");"
+            )
+            res_up = tmp_mgr.install_or_update_script(test_js, enabled=False)
+            self.assertEqual(res_up["action"], "updated")
+            updated_script = tmp_mgr.find_script("Unit Test Script")
+            self.assertFalse(updated_script.enabled)
+            self.assertIn("Updated test", updated_script.code)
+
+            # Delete script
+            self.assertTrue(tmp_mgr.delete_script(res["id"]))
+            self.assertIsNone(tmp_mgr.find_script("Unit Test Script"))
 
 
 if __name__ == "__main__":

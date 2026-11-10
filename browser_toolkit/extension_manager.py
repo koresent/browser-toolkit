@@ -6,15 +6,111 @@ from the user's Zen profile storage databases.
 
 import json
 import re
+import sqlite3
+import struct
+import time
+import uuid
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import snappy
+from dfindexeddb.indexeddb.firefox import definitions, gecko
 from dfindexeddb.indexeddb.firefox.record import FileReader
 
 from .profile import find_zen_profile
 from .parser import parse_userstyle, parse_userscript
+
+
+def encode_idb_number(val: float | int) -> bytes:
+    """Encodes a numeric ID into Firefox IndexedDB key format."""
+    int_val = struct.unpack(">Q", struct.pack(">d", float(val)))[0]
+    if int_val & 0x8000000000000000 == 0:
+        int_val = int_val | 0x8000000000000000
+    else:
+        int_val = (-struct.unpack(">q", struct.pack(">Q", int_val))[0]) & 0xFFFFFFFFFFFFFFFF
+    number_bytes = struct.pack(">Q", int_val).rstrip(b"\x00")
+    return b"\x10" + number_bytes
+
+
+def encode_idb_string(s: str) -> bytes:
+    """Encodes a string into Firefox IndexedDB key format (0x30 prefix + Caesar +1 shift)."""
+    return b"0" + bytes((c + 1) for c in s.encode("utf-8"))
+
+
+def decode_idb_string(b: bytes) -> str:
+    """Decodes a Firefox IndexedDB string key."""
+    if b.startswith(b"0"):
+        return bytes((c - 1) for c in b[1:]).decode("utf-8", errors="replace")
+    return str(b)
+
+
+def decompress_idb_blob(raw_data: bytes) -> bytes:
+    """Decompresses a Snappy / Gecko IndexedDB data blob."""
+    if raw_data.startswith(definitions.FRAME_HEADER):
+        uncompressed = bytearray()
+        pos = len(definitions.FRAME_HEADER)
+        while pos < len(raw_data):
+            is_uncompressed = raw_data[pos]
+            block_size = int.from_bytes(raw_data[pos + 1 : pos + 4], byteorder="little")
+            if is_uncompressed:
+                uncompressed += raw_data[pos + 8 : pos + 8 + block_size - 4]
+            else:
+                uncompressed += snappy.decompress(raw_data[pos + 8 : pos + 8 + block_size - 4])
+            pos += block_size + 4
+        return bytes(uncompressed)
+    else:
+        return snappy.decompress(raw_data)
+
+
+class GeckoStructuredCloneEncoder:
+    """Serializes Python values into Gecko Structured Clone format compressed with Snappy."""
+
+    @classmethod
+    def encode(cls, obj: Any) -> bytes:
+        buf = bytearray()
+        buf += struct.pack("<II", 3, 0xFFF10000)
+        cls._write_val(buf, obj)
+        return snappy.compress(bytes(buf))
+
+    @classmethod
+    def _write_val(cls, buf: bytearray, val: Any) -> None:
+        if val is None or isinstance(val, (gecko.types.Null, gecko.types.Undefined)):
+            buf += struct.pack("<II", 0, 0xFFFF0000)
+        elif isinstance(val, bool):
+            buf += struct.pack("<II", 1 if val else 0, 0xFFFF0002)
+        elif isinstance(val, int):
+            buf += struct.pack("<iI", val, 0xFFFF0003)
+        elif isinstance(val, float):
+            buf += struct.pack("<d", val)
+        elif isinstance(val, str):
+            try:
+                raw = val.encode("latin-1")
+                data = 0x80000000 | len(raw)
+            except UnicodeEncodeError:
+                raw = val.encode("utf-16-le")
+                data = len(raw) // 2
+            buf += struct.pack("<II", data, 0xFFFF0004)
+            padded = bytearray(raw)
+            if len(padded) % 8:
+                padded += b"\x00" * (8 - (len(padded) % 8))
+            buf += padded
+        elif isinstance(val, (list, tuple, gecko.types.JSArray)):
+            items = val.values if isinstance(val, gecko.types.JSArray) else val
+            buf += struct.pack("<II", len(items), 0xFFFF0007)
+            for idx, item in enumerate(items):
+                cls._write_val(buf, idx)
+                cls._write_val(buf, item)
+            buf += struct.pack("<II", 0, 0xFFFF0013)
+        elif isinstance(val, dict):
+            buf += struct.pack("<II", 0, 0xFFFF0008)
+            for k, v in val.items():
+                cls._write_val(buf, str(k))
+                cls._write_val(buf, v)
+            buf += struct.pack("<II", 0, 0xFFFF0013)
+        else:
+            raise TypeError(f"Unsupported type for structured clone: {type(val)}")
 
 
 @dataclass
@@ -88,6 +184,13 @@ class ExtensionManager:
 
     STYLUS_ADDON_ID = "{7a7a4a92-a2a0-41d1-9fd7-1e92480d612d}"
     VM_ADDON_ID = "{aecec67f-0d10-4fa7-b7c7-609a2db280cf}"
+
+    @staticmethod
+    def _connect(db_path: Path | str) -> sqlite3.Connection:
+        """Opens a connection to Firefox IndexedDB SQLite database, registering custom Gecko triggers."""
+        conn = sqlite3.connect(db_path, timeout=10.0)
+        conn.create_function("update_refcount", 2, lambda old, new: None)
+        return conn
 
     def __init__(self, profile_path: Optional[str | Path] = None):
         self.profile_dir = Path(profile_path).resolve() if profile_path else find_zen_profile()
@@ -438,3 +541,414 @@ class ExtensionManager:
             "only_local": only_local,
             "only_installed": only_installed,
         }
+
+    def find_style(self, target: str | int) -> Optional[StylusStyle]:
+        """Finds an installed style by numeric ID, exact name, or partial name."""
+        styles = self.list_styles()
+        target_str = str(target).strip()
+        if target_str.isdigit():
+            target_id = int(target_str)
+            for s in styles:
+                if s.id == target_id:
+                    return s
+
+        t_lower = target_str.lower()
+        for s in styles:
+            if s.name.strip().lower() == t_lower:
+                return s
+
+        for s in styles:
+            if t_lower in s.name.lower():
+                return s
+
+        return None
+
+    def set_style_enabled(self, target: str | int, enabled: bool) -> bool:
+        """Enables or disables an installed Stylus style directly in SQLite storage."""
+        db_path = self.get_stylus_db_path()
+        if not db_path:
+            raise FileNotFoundError("Stylus database not found")
+
+        style = self.find_style(target)
+        if not style:
+            return False
+
+        key = encode_idb_number(style.id)
+        conn = self._connect(db_path)
+        try:
+            row = conn.execute("SELECT data FROM object_data WHERE key = ?", (key,)).fetchone()
+            if not row:
+                return False
+
+            raw_data = row[0]
+            decomp = bytearray(decompress_idb_blob(raw_data))
+            pos = decomp.find(b"enabled\x00")
+            if pos != -1 and decomp[pos + 12 : pos + 16] == b"\x02\x00\xff\xff":
+                decomp[pos + 8] = 1 if enabled else 0
+                new_data = snappy.compress(bytes(decomp))
+            else:
+                val = gecko.JSStructuredCloneDecoder.FromBytes(raw_data)
+                val["enabled"] = enabled
+                val["_rev"] = float(time.time() * 1000)
+                new_data = GeckoStructuredCloneEncoder.encode(val)
+
+            conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (new_data, key))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    def toggle_style(self, target: str | int) -> bool:
+        """Toggles an installed Stylus style on or off."""
+        style = self.find_style(target)
+        if not style:
+            return False
+        return self.set_style_enabled(target, not style.enabled)
+
+    def delete_style(self, target: str | int) -> bool:
+        """Deletes an installed style from Stylus SQLite storage."""
+        db_path = self.get_stylus_db_path()
+        if not db_path:
+            raise FileNotFoundError("Stylus database not found")
+
+        style = self.find_style(target)
+        if not style:
+            return False
+
+        key = encode_idb_number(style.id)
+        conn = self._connect(db_path)
+        try:
+            conn.execute("DELETE FROM object_data WHERE key = ?", (key,))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    def install_or_update_style(self, style_path: Path | str, enabled: bool = True) -> Dict[str, Any]:
+        """Installs or updates a .user.css file directly into Stylus SQLite storage."""
+        p = Path(style_path).resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"UserStyle file not found: {p}")
+
+        info = parse_userstyle(p)
+        db_path = self.get_stylus_db_path()
+        if not db_path:
+            raise FileNotFoundError("Stylus database not found")
+
+        name = info.name or p.stem
+        existing = self.find_style(name)
+        now_ms = float(time.time() * 1000)
+        source_code = p.read_text(encoding="utf-8", errors="replace")
+
+        conn = self._connect(db_path)
+        try:
+            if existing:
+                style_id = existing.id
+                key = encode_idb_number(style_id)
+                row = conn.execute("SELECT data FROM object_data WHERE key = ?", (key,)).fetchone()
+                if row:
+                    try:
+                        record_dict = gecko.JSStructuredCloneDecoder.FromBytes(row[0])
+                    except Exception:
+                        record_dict = dict(existing.original_data)
+                else:
+                    record_dict = dict(existing.original_data)
+
+                record_dict["name"] = name
+                record_dict["enabled"] = enabled
+                record_dict["_rev"] = now_ms
+                record_dict["sourceCode"] = source_code
+                record_dict["usercssData"] = {
+                    "name": name,
+                    "version": info.version or "1.0.0",
+                    "description": info.description or "",
+                    "author": info.author or "",
+                    "homepageURL": info.homepage_url or "",
+                }
+                record_dict["sections"] = [
+                    {
+                        "code": sec.css_content,
+                        "domains": sec.domains,
+                        "urls": sec.urls,
+                        "urlPrefixes": sec.url_prefixes,
+                        "regexps": sec.regexps,
+                    }
+                    for sec in info.sections
+                ]
+
+                new_data = GeckoStructuredCloneEncoder.encode(record_dict)
+                conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (new_data, key))
+                conn.commit()
+                return {"id": style_id, "name": name, "action": "updated", "enabled": enabled}
+            else:
+                row = conn.execute("SELECT auto_increment FROM object_store WHERE id = 1").fetchone()
+                auto_inc = row[0] if row else 1
+                new_id = auto_inc
+                conn.execute("UPDATE object_store SET auto_increment = ? WHERE id = 1", (auto_inc + 1,))
+
+                key = encode_idb_number(new_id)
+                new_record = {
+                    "id": new_id,
+                    "_id": str(uuid.uuid4()),
+                    "_rev": now_ms,
+                    "installDate": now_ms,
+                    "name": name,
+                    "enabled": enabled,
+                    "sourceCode": source_code,
+                    "usercssData": {
+                        "name": name,
+                        "version": info.version or "1.0.0",
+                        "description": info.description or "",
+                        "author": info.author or "",
+                        "homepageURL": info.homepage_url or "",
+                    },
+                    "sections": [
+                        {
+                            "code": sec.css_content,
+                            "domains": sec.domains,
+                            "urls": sec.urls,
+                            "urlPrefixes": sec.url_prefixes,
+                            "regexps": sec.regexps,
+                        }
+                        for sec in info.sections
+                    ],
+                }
+                new_data = GeckoStructuredCloneEncoder.encode(new_record)
+                conn.execute(
+                    "INSERT INTO object_data (object_store_id, key, index_data_values, file_ids, data) VALUES (1, ?, NULL, NULL, ?)",
+                    (key, new_data),
+                )
+                conn.commit()
+                return {"id": new_id, "name": name, "action": "created", "enabled": enabled}
+        finally:
+            conn.close()
+
+    def find_script(self, target: str | int) -> Optional[ViolentmonkeyScript]:
+        """Finds an installed script by numeric ID, exact name, or partial name."""
+        scripts = self.list_scripts()
+        target_str = str(target).strip()
+        if target_str.isdigit():
+            target_id = int(target_str)
+            for sc in scripts:
+                if sc.id == target_id:
+                    return sc
+
+        t_lower = target_str.lower()
+        for sc in scripts:
+            if sc.name.strip().lower() == t_lower:
+                return sc
+
+        for sc in scripts:
+            if t_lower in sc.name.lower():
+                return sc
+
+        return None
+
+    def set_script_enabled(self, target: str | int, enabled: bool) -> bool:
+        """Enables or disables an installed Violentmonkey script directly in SQLite storage."""
+        db_path = self.get_violentmonkey_db_path()
+        if not db_path:
+            raise FileNotFoundError("Violentmonkey database not found")
+
+        script = self.find_script(target)
+        if not script:
+            return False
+
+        scr_key = encode_idb_string(f"scr:{script.id}")
+        conn = self._connect(db_path)
+        try:
+            row = conn.execute("SELECT data FROM object_data WHERE key = ?", (scr_key,)).fetchone()
+            if not row:
+                return False
+
+            raw_data = row[0]
+            decomp = bytearray(decompress_idb_blob(raw_data))
+            pos = decomp.find(b"enabled\x00")
+            if pos != -1 and decomp[pos + 12 : pos + 16] == b"\x03\x00\xff\xff":
+                decomp[pos + 8] = 1 if enabled else 0
+                new_data = snappy.compress(bytes(decomp))
+            else:
+                val = gecko.JSStructuredCloneDecoder.FromBytes(raw_data)
+                cfg = val.get("config") or {}
+                cfg["enabled"] = 1 if enabled else 0
+                val["config"] = cfg
+                new_data = GeckoStructuredCloneEncoder.encode(val)
+
+            conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (new_data, scr_key))
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    def toggle_script(self, target: str | int) -> bool:
+        """Toggles an installed Violentmonkey script on or off."""
+        script = self.find_script(target)
+        if not script:
+            return False
+        return self.set_script_enabled(target, not script.enabled)
+
+    def delete_script(self, target: str | int) -> bool:
+        """Deletes an installed script from Violentmonkey SQLite storage."""
+        db_path = self.get_violentmonkey_db_path()
+        if not db_path:
+            raise FileNotFoundError("Violentmonkey database not found")
+
+        script = self.find_script(target)
+        if not script:
+            return False
+
+        keys = [
+            encode_idb_string(f"scr:{script.id}"),
+            encode_idb_string(f"code:{script.id}"),
+            encode_idb_string(f"mod:{script.id}"),
+            encode_idb_string(f"val:{script.id}"),
+        ]
+        conn = self._connect(db_path)
+        try:
+            conn.execute(
+                f"DELETE FROM object_data WHERE key IN ({','.join('?' for _ in keys)})",
+                keys,
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+    def install_or_update_script(self, script_path: Path | str, enabled: bool = True) -> Dict[str, Any]:
+        """Installs or updates a .user.js file directly into Violentmonkey SQLite storage."""
+        p = Path(script_path).resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"UserScript file not found: {p}")
+
+        info = parse_userscript(p)
+        db_path = self.get_violentmonkey_db_path()
+        if not db_path:
+            raise FileNotFoundError("Violentmonkey database not found")
+
+        name = info.name or p.stem
+        existing = self.find_script(name)
+        now_ms = float(time.time() * 1000)
+        raw_code = p.read_text(encoding="utf-8", errors="replace")
+
+        conn = self._connect(db_path)
+        try:
+            if existing:
+                script_id = existing.id
+                code_key = encode_idb_string(f"code:{script_id}")
+                scr_key = encode_idb_string(f"scr:{script_id}")
+                mod_key = encode_idb_string(f"mod:{script_id}")
+
+                code_data = GeckoStructuredCloneEncoder.encode(raw_code)
+                conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (code_data, code_key))
+
+                row = conn.execute("SELECT data FROM object_data WHERE key = ?", (scr_key,)).fetchone()
+                if row:
+                    try:
+                        scr_dict = gecko.JSStructuredCloneDecoder.FromBytes(row[0])
+                    except Exception:
+                        scr_dict = {}
+                else:
+                    scr_dict = {}
+
+                cfg = scr_dict.get("config") or {}
+                cfg["enabled"] = 1 if enabled else 0
+                scr_dict["config"] = cfg
+
+                meta = scr_dict.get("meta") or {}
+                meta["name"] = name
+                meta["version"] = info.version or meta.get("version", "1.0.0")
+                if info.description:
+                    meta["description"] = info.description
+                if info.matches:
+                    meta["match"] = info.matches
+                if info.includes:
+                    meta["include"] = info.includes
+                if info.grants:
+                    meta["grant"] = info.grants
+                meta["runAt"] = info.run_at or meta.get("runAt", "document-end")
+                scr_dict["meta"] = meta
+
+                props = scr_dict.get("props") or {}
+                props["lastModified"] = now_ms
+                props["lastUpdated"] = now_ms
+                scr_dict["props"] = props
+
+                scr_data = GeckoStructuredCloneEncoder.encode(scr_dict)
+                conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (scr_data, scr_key))
+
+                mod_data = GeckoStructuredCloneEncoder.encode(now_ms)
+                conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (mod_data, mod_key))
+
+                conn.commit()
+                return {"id": script_id, "name": name, "action": "updated", "enabled": enabled}
+            else:
+                rows = conn.execute("SELECT key FROM object_data").fetchall()
+                existing_ids = []
+                for r in rows:
+                    k_str = decode_idb_string(r[0])
+                    if k_str.startswith("scr:"):
+                        try:
+                            existing_ids.append(int(k_str.split(":", 1)[1]))
+                        except ValueError:
+                            pass
+                new_id = (max(existing_ids) + 1) if existing_ids else 1
+
+                scr_key = encode_idb_string(f"scr:{new_id}")
+                code_key = encode_idb_string(f"code:{new_id}")
+                mod_key = encode_idb_string(f"mod:{new_id}")
+
+                scr_dict = {
+                    "custom": {
+                        "origInclude": True,
+                        "origExclude": True,
+                        "origMatch": True,
+                        "origExcludeMatch": True,
+                        "origTag": True,
+                        "pathMap": {},
+                    },
+                    "config": {
+                        "enabled": 1 if enabled else 0,
+                        "shouldUpdate": 1,
+                        "removed": 0,
+                    },
+                    "meta": {
+                        "name": name,
+                        "namespace": info.namespace or "",
+                        "version": info.version or "1.0.0",
+                        "description": info.description or "",
+                        "author": info.author or "",
+                        "match": info.matches,
+                        "include": info.includes,
+                        "grant": info.grants,
+                        "runAt": info.run_at or "document-end",
+                    },
+                    "props": {
+                        "id": new_id,
+                        "lastModified": now_ms,
+                        "uuid": str(uuid.uuid4()),
+                        "position": new_id,
+                        "uri": f"{name}-0a{info.namespace}-0a",
+                        "lastUpdated": now_ms,
+                    },
+                }
+
+                scr_data = GeckoStructuredCloneEncoder.encode(scr_dict)
+                code_data = GeckoStructuredCloneEncoder.encode(raw_code)
+                mod_data = GeckoStructuredCloneEncoder.encode(now_ms)
+
+                conn.execute(
+                    "INSERT INTO object_data (object_store_id, key, index_data_values, file_ids, data) VALUES (1, ?, NULL, NULL, ?)",
+                    (scr_key, scr_data),
+                )
+                conn.execute(
+                    "INSERT INTO object_data (object_store_id, key, index_data_values, file_ids, data) VALUES (1, ?, NULL, NULL, ?)",
+                    (code_key, code_data),
+                )
+                conn.execute(
+                    "INSERT INTO object_data (object_store_id, key, index_data_values, file_ids, data) VALUES (1, ?, NULL, NULL, ?)",
+                    (mod_key, mod_data),
+                )
+                conn.commit()
+                return {"id": new_id, "name": name, "action": "created", "enabled": enabled}
+        finally:
+            conn.close()

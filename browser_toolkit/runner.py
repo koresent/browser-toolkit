@@ -1101,3 +1101,62 @@ class AuditorRunner:
             scripts_dir=scripts_dir,
             profile_path=self.profile_path,
         )
+
+    def ext_find_style(self, target: str | int) -> Optional[Dict[str, Any]]:
+        mgr = self.get_extension_manager()
+        s = mgr.find_style(target)
+        if not s:
+            return None
+        return {
+            "id": s.id,
+            "name": s.name,
+            "enabled": s.enabled,
+            "sections_count": len(s.sections),
+            "domains": [d for sec in s.sections for d in sec.domains],
+        }
+
+    def ext_set_style_enabled(self, target: str | int, enabled: bool) -> bool:
+        mgr = self.get_extension_manager()
+        return mgr.set_style_enabled(target, enabled)
+
+    def ext_toggle_style(self, target: str | int) -> bool:
+        mgr = self.get_extension_manager()
+        return mgr.toggle_style(target)
+
+    def ext_delete_style(self, target: str | int) -> bool:
+        mgr = self.get_extension_manager()
+        return mgr.delete_style(target)
+
+    def ext_install_or_update_style(self, style_path: str | Path, enabled: bool = True) -> Dict[str, Any]:
+        mgr = self.get_extension_manager()
+        return mgr.install_or_update_style(style_path, enabled=enabled)
+
+    def ext_find_script(self, target: str | int) -> Optional[Dict[str, Any]]:
+        mgr = self.get_extension_manager()
+        sc = mgr.find_script(target)
+        if not sc:
+            return None
+        return {
+            "id": sc.id,
+            "name": sc.name,
+            "version": sc.version,
+            "enabled": sc.enabled,
+            "matches": sc.matches,
+            "code_size": len(sc.code),
+        }
+
+    def ext_set_script_enabled(self, target: str | int, enabled: bool) -> bool:
+        mgr = self.get_extension_manager()
+        return mgr.set_script_enabled(target, enabled)
+
+    def ext_toggle_script(self, target: str | int) -> bool:
+        mgr = self.get_extension_manager()
+        return mgr.toggle_script(target)
+
+    def ext_delete_script(self, target: str | int) -> bool:
+        mgr = self.get_extension_manager()
+        return mgr.delete_script(target)
+
+    def ext_install_or_update_script(self, script_path: str | Path, enabled: bool = True) -> Dict[str, Any]:
+        mgr = self.get_extension_manager()
+        return mgr.install_or_update_script(script_path, enabled=enabled)

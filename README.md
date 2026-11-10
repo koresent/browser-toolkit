@@ -153,6 +153,32 @@
   uv run browser-toolkit ext serve --port 8080
   ```
 
+- **Прямое программное управление стилями (Stylus)**:
+  - `ext enable-style <ID_или_имя>`: Включить установленный стиль.
+  - `ext disable-style <ID_или_имя>`: Выключить мешающий стиль (необходимо агенту при отладке страниц).
+  - `ext toggle-style <ID_или_имя>`: Переключить активность стиля на противоположную.
+  - `ext delete-style <ID_или_имя>`: Удалить стиль из базы Stylus.
+  - `ext install-style <path_to_usercss> [--disabled]`: Установить новый или перезаписать существующий стиль напрямую в SQLite storage Stylus без участия UI браузера.
+  ```bash
+  uv run browser-toolkit ext disable-style "Discord Gruvbox"
+  uv run browser-toolkit ext toggle-style 6
+  uv run browser-toolkit ext install-style ./userstyles/habr/habr.user.css
+  uv run browser-toolkit ext delete-style "Old Habr Theme"
+  ```
+
+- **Прямое программное управление скриптами (Violentmonkey)**:
+  - `ext enable-script <ID_или_имя>`: Включить установленный скрипт.
+  - `ext disable-script <ID_или_имя>`: Выключить скрипт (для изоляции багов).
+  - `ext toggle-script <ID_или_имя>`: Переключить активность скрипта.
+  - `ext delete-script <ID_или_имя>`: Удалить скрипт и сопутствующие данные (`code`, `mod`, `val`).
+  - `ext install-script <path_to_userjs> [--disabled]`: Установить или обновить `.user.js` напрямую в SQLite storage Violentmonkey.
+  ```bash
+  uv run browser-toolkit ext disable-script "YouTube Shorts Redirect"
+  uv run browser-toolkit ext toggle-script 1
+  uv run browser-toolkit ext install-script ./userscripts/anti-adblock.user.js
+  uv run browser-toolkit ext delete-script 18
+  ```
+
 ---
 
 ## Установка
