@@ -13,6 +13,7 @@ from .search import search_dom
 from .interaction import PageInteractor, execute_action_sequence
 from .test_rule import test_rule_impact
 from .scanner import scan_directory
+from .crawler import discover_sample_subpages
 
 
 class AuditorRunner:
@@ -25,22 +26,27 @@ class AuditorRunner:
         self,
         style_path: str | Path,
         target_url: Optional[str] = None,
+        urls: Optional[List[str]] = None,
+        sample_pages: int = 2,
         output_dir: Optional[str | Path] = None,
     ) -> Dict[str, Any]:
         info = parse_userstyle(style_path)
-        url = target_url or info.get_target_url()
-        css_to_apply = info.get_combined_css_for_url(url)
+        base_url = target_url or info.get_target_url()
+        css_to_apply = info.get_combined_css_for_url(base_url)
 
         out_path = Path(output_dir or f"./audit-results/{info.filepath.stem}").resolve()
         out_path.mkdir(parents=True, exist_ok=True)
+
+        pages_to_test = list(urls) if urls else [base_url]
 
         report: Dict[str, Any] = {
             "type": "userstyle",
             "name": info.name or info.filepath.name,
             "version": info.version,
-            "target_url": url,
+            "target_url": base_url,
             "style_file": str(info.filepath),
             "output_dir": str(out_path),
+            "tested_pages": [],
         }
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
@@ -62,39 +68,87 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    # Navigate to target
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                    page.wait_for_timeout(2000)
+                    # 1. Navigate to base URL
+                    page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(1500)
 
-                    # 1. Capture BEFORE screenshot
-                    before_screenshot = out_path / "before.png"
-                    page.screenshot(path=str(before_screenshot), full_page=False)
-                    report["screenshot_before"] = str(before_screenshot)
+                    # Auto-discover representative subpages if requested and not explicitly provided
+                    if sample_pages > 0 and not urls:
+                        discovered = discover_sample_subpages(page, base_url, max_subpages=sample_pages)
+                        for d_url in discovered:
+                            if d_url not in pages_to_test:
+                                pages_to_test.append(d_url)
 
-                    # 2. Run CSS Selector Audit & inject styles
-                    css_result = audit_css_on_page(page, css_to_apply)
-                    page.wait_for_timeout(1000)
+                    # Track aggregated selector coverage across all tested pages
+                    matched_by_selector: Dict[str, Dict[str, Any]] = {}
+                    dead_candidates: Dict[str, List[Any]] = {}
+                    invalid_selectors: List[Dict[str, str]] = []
+                    total_selectors_count = 0
+                    parse_err = None
 
-                    # 3. Capture AFTER screenshot
-                    after_screenshot = out_path / "after.png"
-                    page.screenshot(path=str(after_screenshot), full_page=False)
-                    report["screenshot_after"] = str(after_screenshot)
+                    for idx, p_url in enumerate(pages_to_test):
+                        if idx > 0:
+                            page.goto(p_url, wait_until="domcontentloaded", timeout=30000)
+                            page.wait_for_timeout(1500)
+
+                        # Screenshots
+                        before_shot = out_path / f"page_{idx + 1}_before.png"
+                        page.screenshot(path=str(before_shot), full_page=False)
+
+                        css_result = audit_css_on_page(page, css_to_apply)
+                        total_selectors_count = max(total_selectors_count, css_result.total_selectors)
+                        if css_result.parse_error:
+                            parse_err = css_result.parse_error
+
+                        after_shot = out_path / f"page_{idx + 1}_after.png"
+                        page.screenshot(path=str(after_shot), full_page=False)
+
+                        page_matched = 0
+                        for m in css_result.matched:
+                            page_matched += 1
+                            if m.selector not in matched_by_selector:
+                                matched_by_selector[m.selector] = {
+                                    "selector": m.selector,
+                                    "total_count": m.count,
+                                    "found_on_pages": [p_url],
+                                    "samples": m.samples,
+                                }
+                            else:
+                                matched_by_selector[m.selector]["total_count"] += m.count
+                                matched_by_selector[m.selector]["found_on_pages"].append(p_url)
+
+                        for d in css_result.dead:
+                            if d.selector not in matched_by_selector:
+                                if d.selector not in dead_candidates:
+                                    dead_candidates[d.selector] = d.suggestions
+
+                        for inv in css_result.invalid:
+                            if inv not in invalid_selectors:
+                                invalid_selectors.append(inv)
+
+                        report["tested_pages"].append({
+                            "url": p_url,
+                            "matched_count": page_matched,
+                            "screenshot_before": str(before_shot),
+                            "screenshot_after": str(after_shot),
+                        })
+
+                    # Dead selectors are strictly those not matched on ANY page
+                    truly_dead = [
+                        {"selector": sel, "suggestions": dead_candidates.get(sel, [])}
+                        for sel in dead_candidates.keys()
+                        if sel not in matched_by_selector
+                    ]
 
                     report["css_audit"] = {
-                        "total_selectors": css_result.total_selectors,
-                        "matched_count": len(css_result.matched),
-                        "dead_count": len(css_result.dead),
-                        "invalid_count": len(css_result.invalid),
-                        "parse_error": css_result.parse_error,
-                        "matched": [
-                            {"selector": m.selector, "count": m.count, "samples": m.samples}
-                            for m in css_result.matched
-                        ],
-                        "dead": [
-                            {"selector": d.selector, "suggestions": d.suggestions}
-                            for d in css_result.dead
-                        ],
-                        "invalid": css_result.invalid,
+                        "total_selectors": total_selectors_count,
+                        "cumulative_matched_count": len(matched_by_selector),
+                        "dead_count": len(truly_dead),
+                        "invalid_count": len(invalid_selectors),
+                        "parse_error": parse_err,
+                        "matched": list(matched_by_selector.values()),
+                        "dead": truly_dead,
+                        "invalid": invalid_selectors,
                     }
                 finally:
                     context.close()

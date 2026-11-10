@@ -7,6 +7,7 @@ from .profile import ZenProfileContext
 from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page
 from .js_auditor import inject_userscript, JSAuditResult, GM_SHIM_JS
+from .crawler import discover_sample_subpages
 
 
 def scan_directory(
@@ -53,8 +54,26 @@ def scan_directory(
                         page.wait_for_timeout(1500)
 
                         res = audit_css_on_page(page, css)
-                        dead_cnt = len(res.dead)
-                        status = "OK" if dead_cnt == 0 and res.total_selectors > 0 else "BROKEN"
+                        matched_set = {m.selector for m in res.matched}
+
+                        # If there are dead selectors, check 1 diverse subpage (e.g. item/details)
+                        if res.dead:
+                            subpages = discover_sample_subpages(page, url, max_subpages=1)
+                            for sub_url in subpages:
+                                try:
+                                    page.goto(sub_url, wait_until="domcontentloaded", timeout=25000)
+                                    page.wait_for_timeout(1000)
+                                    sub_res = audit_css_on_page(page, css)
+                                    matched_set.update({m.selector for m in sub_res.matched})
+                                except Exception:
+                                    pass
+
+                        dead_selectors = [d.selector for d in res.dead if d.selector not in matched_set]
+                        dead_cnt = len(dead_selectors)
+                        total_cnt = res.total_selectors
+                        matched_cnt = len(matched_set)
+
+                        status = "OK" if dead_cnt == 0 and total_cnt > 0 else "BROKEN"
 
                         item = {
                             "type": "userstyle",
@@ -62,10 +81,10 @@ def scan_directory(
                             "file": str(f.relative_to(path)),
                             "url": url,
                             "status": status,
-                            "total_selectors": res.total_selectors,
-                            "matched": len(res.matched),
+                            "total_selectors": total_cnt,
+                            "matched": matched_cnt,
                             "dead": dead_cnt,
-                            "dead_selectors": [d.selector for d in res.dead],
+                            "dead_selectors": dead_selectors,
                         }
                         if not only_broken or status == "BROKEN":
                             results.append(item)

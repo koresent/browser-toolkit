@@ -12,39 +12,48 @@ from .scanner import scan_directory
 def print_style_summary(report: Dict[str, Any]) -> None:
     audit = report.get("css_audit", {})
     total = audit.get("total_selectors", 0)
-    matched = audit.get("matched_count", 0)
+    matched = audit.get("cumulative_matched_count", audit.get("matched_count", 0))
     dead = audit.get("dead_count", 0)
     invalid = audit.get("invalid_count", 0)
+    pages = report.get("tested_pages", [])
 
     print("\n" + "=" * 60)
     print(f"🎨 UserStyle Audit: {report.get('name')} (v{report.get('version', 'unknown')})")
-    print(f"🌐 Target URL:     {report.get('target_url')}")
+    print(f"🌐 Base Target:    {report.get('target_url')}")
     print(f"📁 Source file:    {report.get('style_file')}")
     print(f"📸 Screenshots:    {report.get('output_dir')}/")
+    if pages:
+        print(f"📑 Tested Pages ({len(pages)}):")
+        for p in pages:
+            print(f"   • {p['url']} ({p.get('matched_count', 0)} selectors matched)")
     print("-" * 60)
-    print(f"📊 Selectors Summary: {total} total | ✅ {matched} matched | ❌ {dead} dead | ⚠️ {invalid} invalid")
+    print(f"📊 Cumulative Summary: {total} total | ✅ {matched} matched | ❌ {dead} unconfirmed/dead | ⚠️ {invalid} invalid")
     print("-" * 60)
 
     if dead > 0:
-        print("\n❌ Dead Selectors (Need Attention):")
-        for item in audit.get("dead", []):
+        print("\n❌ Unmatched / Dead Selectors on Visited Pages:")
+        for item in audit.get("dead", [])[:15]:
             sel = item["selector"]
             print(f"  • {sel}")
             suggestions = item.get("suggestions", [])
             if suggestions:
                 print("    💡 Potential candidates found in DOM:")
-                for s in suggestions[:3]:
+                for s in suggestions[:2]:
                     cls_str = f".{s['className']}" if s.get("className") else ""
                     id_str = f"#{s['id']}" if s.get("id") else ""
                     kw = s.get("matchedKeyword", "")
                     print(f"       - <{s.get('tagName')}{id_str}{cls_str}> (matched '{kw}')")
+        if dead > 15:
+            print(f"  ... and {dead - 15} more unconfirmed selectors (may belong to other subpages).")
 
     if matched > 0:
         print("\n✅ Matched Selectors (Sample):")
-        for item in audit.get("matched", [])[:10]:
-            print(f"  • {item['selector']} -> {item['count']} elements")
-        if matched > 10:
-            print(f"  ... and {matched - 10} more matched selectors.")
+        for item in audit.get("matched", [])[:8]:
+            pages_found = len(item.get("found_on_pages", []))
+            pages_suffix = f" (on {pages_found} page{'s' if pages_found > 1 else ''})" if pages_found else ""
+            print(f"  • {item['selector']} -> {item.get('total_count', item.get('count', 0))} elements{pages_suffix}")
+        if matched > 8:
+            print(f"  ... and {matched - 8} more matched selectors.")
 
     print("=" * 60 + "\n")
 
@@ -144,7 +153,9 @@ def main() -> None:
     # Command: audit
     audit_parser = subparsers.add_parser("audit", help="Audit a .user.css or .user.js file")
     audit_parser.add_argument("file", help="Path to .user.css or .user.js file")
-    audit_parser.add_argument("--url", help="Override target URL")
+    audit_parser.add_argument("--url", help="Override target base URL")
+    audit_parser.add_argument("--urls", help="Comma-separated list of multiple URLs to audit across")
+    audit_parser.add_argument("--sample-pages", type=int, default=2, help="Number of representative subpages to auto-discover and test (default: 2)")
     audit_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile (run clean)")
     audit_parser.add_argument("--profile", help="Path to custom profile directory")
     audit_parser.add_argument("--headful", action="store_true", help="Run with visible browser window")
@@ -242,7 +253,14 @@ def main() -> None:
         is_js = target_path.suffix == ".js" or ".user.js" in target_path.name
 
         if is_css:
-            report = runner.audit_style(target_path, target_url=args.url, output_dir=args.output)
+            urls_list = [u.strip() for u in args.urls.split(",") if u.strip()] if getattr(args, "urls", None) else None
+            report = runner.audit_style(
+                target_path,
+                target_url=args.url,
+                urls=urls_list,
+                sample_pages=getattr(args, "sample_pages", 2),
+                output_dir=args.output,
+            )
             if args.json:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             else:
