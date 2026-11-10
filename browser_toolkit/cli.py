@@ -237,6 +237,52 @@ def main() -> None:
     map_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     map_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
+    # Command: extract-palette
+    pal_parser = subparsers.add_parser("extract-palette", help="Reverse engineer colors and CSS variables of target site")
+    pal_parser.add_argument("url", help="Target URL")
+    pal_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    pal_parser.add_argument("--profile", help="Path to custom profile")
+    pal_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    pal_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: map-roles
+    roles_parser = subparsers.add_parser("map-roles", help="Map DOM elements to semantic roles (surfaces, text, controls)")
+    roles_parser.add_argument("url", help="Target URL")
+    roles_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    roles_parser.add_argument("--profile", help="Path to custom profile")
+    roles_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    roles_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: scaffold
+    scaffold_parser = subparsers.add_parser("scaffold", help="Generate Gruvbox .user.css boilerplate for site")
+    scaffold_parser.add_argument("url", help="Target URL")
+    scaffold_parser.add_argument("--name", help="Theme name (e.g. Wikipedia)")
+    scaffold_parser.add_argument("--variant", default="dark", choices=["dark", "dark-hard", "dark-soft", "light"], help="Gruvbox variant (default: dark)")
+    scaffold_parser.add_argument("--output", help="File path to save the .user.css")
+    scaffold_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    scaffold_parser.add_argument("--profile", help="Path to custom profile")
+    scaffold_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    scaffold_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: check-contrast
+    contrast_parser = subparsers.add_parser("check-contrast", help="Audit WCAG text contrast across styled page")
+    contrast_parser.add_argument("url", help="Target URL")
+    contrast_parser.add_argument("--css", help="Path to .user.css file to test")
+    contrast_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    contrast_parser.add_argument("--profile", help="Path to custom profile")
+    contrast_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    contrast_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: preview
+    preview_parser = subparsers.add_parser("preview", help="Live hot-reload preview server watching .user.css")
+    preview_parser.add_argument("url", help="Target URL")
+    preview_parser.add_argument("css", help="Path to .user.css file to watch")
+    preview_parser.add_argument("--headful", action="store_true", default=True, help="Run with visible Zen window (default)")
+    preview_parser.add_argument("--headless", action="store_true", help="Run headless taking screenshots on change")
+    preview_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    preview_parser.add_argument("--profile", help="Path to custom profile")
+    preview_parser.add_argument("--output", default="preview.png", help="Path to save preview screenshot")
+
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
 
@@ -411,6 +457,102 @@ def main() -> None:
             if data.get("cumulative_matched_count"):
                 print(f"\n📊 Total Selectors Matched: {data['cumulative_matched_count']} | Remaining dead: {data.get('remaining_dead_count', 0)}")
             print("=" * 70 + "\n")
+
+    elif args.command == "extract-palette":
+        data = runner.extract_palette(args.url)
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print("\n" + "=" * 60)
+            print(f"🎨 Palette Reverse Engineering: {args.url}")
+            print("-" * 60)
+            vars_list = data.get("site_color_variables", [])
+            print(f"Native Site Color Variables Found ({len(vars_list)}):")
+            for v in vars_list[:10]:
+                print(f"  • {v['name']}: {v['value']}")
+            if len(vars_list) > 10:
+                print(f"  ... and {len(vars_list) - 10} more.")
+
+            print("\nTop Computed Background Colors:")
+            for bg in data.get("background_colors", [])[:5]:
+                print(f"  • {bg['color']} ({bg['count']} elements, e.g. {', '.join(bg['samples'])})")
+
+            print("\nTop Computed Text Colors:")
+            for fg in data.get("text_colors", [])[:5]:
+                print(f"  • {fg['color']} ({fg['count']} elements, e.g. {', '.join(fg['samples'])})")
+
+            print(f"\nSVGs & Icons: {data.get('svg_count', 0)} SVG icons found on page.")
+            print("=" * 60 + "\n")
+
+    elif args.command == "map-roles":
+        data = runner.map_roles(args.url)
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            roles = data.get("roles", {})
+            print("\n" + "=" * 60)
+            print(f"🗺️ Semantic UI Roles on {args.url}")
+            print("-" * 60)
+            for role_name, items in roles.items():
+                print(f"\n[{role_name.upper()}] ({len(items)} selectors):")
+                for item in items[:5]:
+                    print(f"  • {item['selector']}")
+                if len(items) > 5:
+                    print(f"    ... and {len(items) - 5} more.")
+            print("=" * 60 + "\n")
+
+    elif args.command == "scaffold":
+        data = runner.scaffold_theme(
+            url=args.url,
+            name=args.name,
+            variant=args.variant,
+            output_path=args.output,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            if args.output:
+                print(f"\n✨ Generated Gruvbox theme saved to: {args.output} ({data.get('content_length')} bytes)\n")
+            else:
+                print("\n" + "=" * 60)
+                print("✨ Generated Gruvbox Theme Draft:")
+                print("-" * 60)
+                print(data.get("content"))
+                print("=" * 60 + "\n")
+
+    elif args.command == "check-contrast":
+        data = runner.check_contrast(args.url, css_path=args.css)
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            audit = data.get("contrast_audit", {})
+            issues = audit.get("issues", [])
+            total = audit.get("totalChecked", 0)
+            failed = audit.get("failedCount", 0)
+            print("\n" + "=" * 60)
+            print(f"⚖️ WCAG Contrast Audit on {args.url}")
+            print(f"Checked Text Nodes: {total} | ❌ Issues: {failed} | ✅ Passing: {total - failed}")
+            print("-" * 60)
+            if issues:
+                print("Low Contrast Elements (Needs Gruvbox adjustment):")
+                for iss in issues[:10]:
+                    print(f"  • <{iss['tagName']}> \"{iss['textSnippet']}\"")
+                    print(f"    Ratio: {iss['contrastRatio']}:1 (Required: {iss['requiredRatio']}:1) | fg: {iss['fg']}, bg: {iss['bg']}")
+                if len(issues) > 10:
+                    print(f"    ... and {len(issues) - 10} more low-contrast elements.")
+            else:
+                print("🎉 Excellent! All visible text elements meet WCAG contrast thresholds!")
+            print("=" * 60 + "\n")
+
+    elif args.command == "preview":
+        headful_mode = not getattr(args, "headless", False)
+        runner.preview(
+            url=args.url,
+            style_path=args.css,
+            headful=headful_mode,
+            screenshot=True,
+            output_screenshot=args.output,
+        )
 
 
 if __name__ == "__main__":

@@ -1,43 +1,93 @@
 # browser-toolkit
 
-Комплексный инструментарий автоматизированного тестирования, аудита и отладки **UserStyles** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
+Комплексный инструментарий автоматизированного тестирования, аудита и **создания Gruvbox-тем** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
 
 ---
 
-## Возможности
+## 🛠️ Инструменты для создания новых Gruvbox-тем
 
-1. **Безопасная работа с профилем Zen:**
-   - Автоматически находит ваш рабочий профиль Zen (`~/.config/zen/profiles.ini`).
-   - Создает мгновенный снимок профиля через CoW reflink (`cp -a --reflink=auto`), сохраняя авторизации, cookies, расширения и локальное хранилище.
-   - Очищает блокировки (`lock`, `.parentlock`) и сессионные вкладки, исключая конфликты с запущенным Zen.
-   - Гарантированно удаляет временную копию профиля по завершении работы.
+Инструментарий полностью заточен под создание фирменных тем **Gruvbox** (Dark, Dark-Hard, Dark-Soft, Light) в точном соответствии со стилем каталога:
 
-2. **Пакетный аудит каталогов (`scan`):**
-   - Сканирует целые каталоги стилей и скриптов в одном сеансе.
-   - Выводит наглядную сводку здоровья стилей (`--only-broken` для фильтрации только проблемных).
+### 1. Реверс-инжиниринг цветов сайта (`extract-palette`)
+Сканирует целевой сайт на наличие нативных CSS-переменных (`--color-...`, `--bg-...`) и кластеризует реальные цвета поверхностей, текста и рамок:
+```bash
+uv run browser-toolkit extract-palette https://habr.com
+```
 
-3. **Картографирование сайта по архетипам DOM и охота за селекторами (`map-site`, `--deep-hunt`):**
-   - Алгоритм DOM Structural Fingerprinting (на базе сходства Жаккара по путям тегов).
-   - Автоматически отличает уникальные макеты (лента, карточка вопроса, профиль, настройки) от однотипных постов.
-   - Отсекает дубликаты (не ходит по сотням похожих тем форума).
-   - Работает «до победного»: краулит сайт до 100% покрытия селекторов или нахождения всех шаблонов.
+### 2. Семантическое картирование ролей DOM (`map-roles`)
+Автоматически группирует селекторы страницы по их функциональным ролям:
+- **Базовые поверхности:** холст, тело сайта, основные контейнеры (`var(--bg0)`).
+- **Приподнятые поверхности:** шапки, меню, сайдбары (`var(--bg-dark)`).
+- **Всплывающие элементы:** карточки, модалки, дропдауны (`var(--bg1)` / `var(--bg2)`).
+- **Типографика:** заголовки (`var(--fg0)`), основной текст (`var(--fg1)`), мета/даты (`var(--fg-muted)`), ссылки (`var(--blue)` / hover `var(--yellow)`).
+- **Формы:** инпуты, кнопки, чекбоксы (`var(--bg1)`, `var(--bg3)`).
+- **Код и иконки:** блоки `pre`/`code`, SVG-фильтры (`filter: sepia(1)`).
 
-4. **Интеллектуальный поиск по DOM и генератор устойчивых селекторов (`search`):**
-   - Поиск элементов по тексту, ключевым словам в классах/ID/aria-атрибутах, ролям или тегам.
-   - Автоматический синтез устойчивых CSS-селекторов (приоритет `data-testid`, `aria-*`, семантические селекторы вместо нестабильных хэшей CSS Modules).
+```bash
+uv run browser-toolkit map-roles https://habr.com
+```
 
-5. **Тестирование гипотез на лету (`test-rule`):**
-   - Примерка CSS-правила на живой странице до изменения файла.
-   - Оценка влияния (Impact Analysis): процент площади экрана, количество скрываемых элементов, предотвращение случайного скрытия контента страницы.
-   - Автоматические скриншоты «ДО» и «ПОСЛЕ».
+### 3. Автоматическая генерация заготовки темы (`scaffold`)
+Создает полностью структурированный файл `.user.css` с метаданными UserStyle, переменными Gruvbox и готовыми блоками селекторов под целевой сайт:
+```bash
+# Сгенерировать тему Gruvbox Dark и сохранить в файл:
+uv run browser-toolkit scaffold https://habr.com --name Habr --output habr/gruvbox.user.css
 
-6. **Интерактивные действия и скриншоты (`screenshot`, `interact`):**
-   - Скриншоты отдельных элементов (`--selector`), всей страницы (`--full-page`) или с наведением мыши (`--hover` для проверки меню и `:hover` состояний).
-   - Выполнение цепочки действий пользователя (`click`, `hover`, `fill`, `press`, `wait`, `screenshot`) для тестирования модальных окон, дропдаунов и вкладок.
+# С вариантом Gruvbox Dark Hard:
+uv run browser-toolkit scaffold https://habr.com --variant dark-hard --output habr/gruvbox.user.css
+```
 
-7. **Аудит пользовательских скриптов (UserScripts):**
-   - Внедрение полифиллов Greasemonkey/Tampermonkey API (`GM_getValue`, `GM_setValue`, `GM_xmlhttpRequest`, `GM_registerMenuCommand` и т.д.).
-   - Перехват ошибок выполнения и логов консоли.
+### 4. Аудит контрастности по WCAG 2.1 (`check-contrast`)
+Проверяет читаемость текста при наложении темы. Рассчитывает относительную яркость и контраст для каждого видимого текста, отслеживая проблемные места (порог 4.5:1 для обычного текста, 3:1 для крупного):
+```bash
+uv run browser-toolkit check-contrast https://qna.habr.com --css path/to/gruvbox.user.css
+```
+
+### 5. Живой предпросмотр с Hot-Reload (`preview`)
+Запускает браузер и отслеживает изменения в файле темы. При сохранении файла стили в браузере обновляются на лету за < 50мс без перезагрузки страницы и без потери фокуса:
+```bash
+# В видимом окне Zen Browser:
+uv run browser-toolkit preview https://habr.com habr/gruvbox.user.css
+
+# В фоне со скриншотом при каждом сохранении:
+uv run browser-toolkit preview https://habr.com habr/gruvbox.user.css --headless
+```
+
+---
+
+## 🔍 Инструменты аудита и багфикса
+
+### 1. Картографирование макетов сайта (`map-site`)
+Использует DOM Structural Fingerprinting (сходство Жаккара) для поиска уникальных типов страниц и отсечения повторяющихся однотипных постов:
+```bash
+uv run browser-toolkit map-site https://qna.habr.com --css path/to/gruvbox.user.css --max-archetypes 5
+```
+
+### 2. Пакетный аудит каталогов (`scan`)
+```bash
+uv run browser-toolkit scan /path/to/userstyles/ --only-broken
+```
+
+### 3. Аудит одного стиля или скрипта (`audit`)
+```bash
+# С глубокой охотой по уникальным архетипам до победного:
+uv run browser-toolkit audit path/to/gruvbox.user.css --deep-hunt
+```
+
+### 4. Поиск элементов и синтез селекторов (`search`)
+```bash
+uv run browser-toolkit search https://github.com --keyword "copilot"
+```
+
+### 5. Тестирование правила на лету (`test-rule`)
+```bash
+uv run browser-toolkit test-rule https://github.com --css '.selector { display: none !important; }'
+```
+
+### 6. Скриншоты и интерактивные действия (`screenshot`, `interact`)
+```bash
+uv run browser-toolkit screenshot https://github.com --selector "header" --output header.png
+```
 
 ---
 
@@ -48,73 +98,4 @@ cd /home/koresent/Projects/personal/browser-toolkit
 uv venv
 uv pip install -e .
 ```
-
----
-
-## Справочник команд
-
-### 1. Пакетное сканирование (`scan`)
-```bash
-# Проверить здоровье всех стилей в папке habr:
-uv run browser-toolkit scan /home/koresent/Projects/personal/userstyles/habr
-
-# Вывести только сломанные файлы:
-uv run browser-toolkit scan /home/koresent/Projects/personal/userstyles/ --only-broken
-```
-
-### 2. Аудит одного стиля или скрипта (`audit`)
-```bash
-# Базовый аудит UserStyle (с авто-выборкой подстраниц):
-uv run browser-toolkit audit /path/to/style.user.css
-
-# Аудит с глубокой охотой по уникальным архетипам сайта до победного:
-uv run browser-toolkit audit /path/to/style.user.css --deep-hunt
-
-# Аудит UserScript:
-uv run browser-toolkit audit /path/to/script.user.js
-```
-
-### 3. Картографирование макетов сайта (`map-site`)
-```bash
-uv run browser-toolkit map-site https://qna.habr.com --css /path/to/style.user.css --max-archetypes 5
-```
-
-### 4. Поиск элементов и синтез селекторов (`search`)
-```bash
-# Найти все элементы, связанные с Copilot на GitHub:
-uv run browser-toolkit search https://github.com --keyword "copilot"
-
-# Найти кнопку по тексту:
-uv run browser-toolkit search https://github.com --text "Sign out" --role button
-```
-
-### 5. Проверка правила на лету (`test-rule`)
-```bash
-uv run browser-toolkit test-rule https://github.com --css 'button[aria-label="Open Copilot…"] { display: none !important; }'
-```
-
-### 6. Скриншоты элементов и интерактивных состояний (`screenshot`)
-```bash
-# Скриншот только шапки сайта:
-uv run browser-toolkit screenshot https://github.com --selector "header" --output /tmp/header.png
-
-# Скриншот выпадающего меню после наведения:
-uv run browser-toolkit screenshot https://github.com --hover "#user-menu" --output /tmp/menu.png
-```
-
-### 7. Цепочка интерактивных действий (`interact`)
-```bash
-uv run browser-toolkit interact https://github.com --actions '[
-  {"action": "click", "selector": "button[aria-label=\\"Open Copilot…\\"]"},
-  {"action": "wait", "ms": 1000},
-  {"action": "screenshot", "path": "/tmp/copilot_opened.png"}
-]'
-```
-
-### 8. Инспекция селектора (`inspect`)
-```bash
-uv run browser-toolkit inspect https://github.com --selector "header"
-```
-
 Все команды поддерживают флаг `--json` для программной интеграции с агентами.
-Команда `browser-auditor` также сохранена как алиас для обратной совместимости.
