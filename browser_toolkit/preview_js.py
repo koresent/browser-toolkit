@@ -12,6 +12,7 @@ from playwright.sync_api import sync_playwright
 from .profile import ZenProfileContext
 from .parser import parse_userscript
 from .js_auditor import inject_userscript
+from .navigation import safe_goto
 
 
 def run_live_script_preview(
@@ -53,7 +54,7 @@ def run_live_script_preview(
                 page = context.new_page()
 
             try:
-                page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                safe_goto(page, target_url, wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(1000)
 
                 while True:

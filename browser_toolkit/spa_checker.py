@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page
 
 from .js_auditor import inject_userscript, JSAuditResult
+from .navigation import safe_goto
 
 
 @dataclass
@@ -49,7 +50,7 @@ def check_spa_resilience(
 ) -> SPAResilienceReport:
     """Tests if a UserScript survives an in-page SPA navigation."""
     if initial_url and page.url != initial_url:
-        page.goto(initial_url, wait_until="domcontentloaded", timeout=30000)
+        safe_goto(page, initial_url, wait_until="domcontentloaded", timeout=30000)
 
     audit_initial = inject_userscript(page, raw_js, run_at=run_at, settle_ms=600)
     initial_selectors = [n.selector for n in audit_initial.mutations.added_nodes if n.selector]

@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import Page
 
 from .css_auditor import audit_css_on_page
+from .navigation import safe_goto
 
 JS_EXTRACT_DOM_FINGERPRINT = r"""() => {
     const tokens = new Set();
@@ -140,7 +141,7 @@ def crawl_site_archetypes(
         visited_urls.add(norm_url)
 
         try:
-            page.goto(norm_url, wait_until="domcontentloaded", timeout=25000)
+            safe_goto(page, norm_url, wait_until="domcontentloaded", timeout=25000)
             page.wait_for_timeout(1200)
         except Exception:
             continue

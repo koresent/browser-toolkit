@@ -6,6 +6,7 @@ unstyled form inputs, low-contrast SVG icons, and missing scrollbar theming.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page
+from .navigation import safe_goto
 
 
 @dataclass
@@ -304,9 +305,9 @@ class ThemeFlawChecker:
     ) -> ThemeFlawReport:
         """Navigates to URL, applies custom CSS if provided, and audits for theme flaws."""
         if wait_network_idle:
-            page.goto(url, wait_until="networkidle", timeout=30000)
+            safe_goto(page, url, wait_until="networkidle", timeout=30000)
         else:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
 
         if self.custom_css:
             page.add_style_tag(content=self.custom_css)

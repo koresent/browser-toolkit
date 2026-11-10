@@ -8,6 +8,7 @@ from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page
 from .js_auditor import inject_userscript, JSAuditResult, GM_SHIM_JS
 from .crawler import discover_sample_subpages
+from .navigation import safe_goto
 
 
 def scan_directory(
@@ -49,7 +50,7 @@ def scan_directory(
                         url = info.get_target_url()
                         css = info.get_combined_css_for_url(url)
 
-                        page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                        safe_goto(page, url, wait_until="domcontentloaded", timeout=25000)
                         page.wait_for_timeout(1500)
 
                         res = audit_css_on_page(page, css)
@@ -60,7 +61,7 @@ def scan_directory(
                             subpages = discover_sample_subpages(page, url, max_subpages=1)
                             for sub_url in subpages:
                                 try:
-                                    page.goto(sub_url, wait_until="domcontentloaded", timeout=25000)
+                                    safe_goto(page, sub_url, wait_until="domcontentloaded", timeout=25000)
                                     page.wait_for_timeout(1000)
                                     sub_res = audit_css_on_page(page, css)
                                     matched_set.update({m.selector for m in sub_res.matched})
@@ -106,7 +107,7 @@ def scan_directory(
                         if info.run_at == "document-start":
                             page.add_init_script(info.raw_js)
 
-                        page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                        safe_goto(page, url, wait_until="domcontentloaded", timeout=25000)
                         page.wait_for_timeout(1500)
 
                         if info.run_at != "document-start":

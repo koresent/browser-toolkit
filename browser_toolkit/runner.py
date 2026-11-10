@@ -28,6 +28,7 @@ from .gm_shim import GM_FULL_SHIM_JS
 from .mutation_tracker import attach_mutation_tracker, collect_dom_mutations
 from .extension_manager import ExtensionManager
 from .sync_server import run_sync_server
+from .navigation import safe_goto
 
 
 class AuditorRunner:
@@ -122,7 +123,7 @@ class AuditorRunner:
                             "invalid": [],
                         }
                         return report
-                    page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, base_url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1500)
 
                     # Auto-discover representative subpages if requested and not explicitly provided
@@ -141,7 +142,7 @@ class AuditorRunner:
 
                     for idx, p_url in enumerate(pages_to_test):
                         if idx > 0:
-                            page.goto(p_url, wait_until="domcontentloaded", timeout=30000)
+                            safe_goto(page, p_url, wait_until="domcontentloaded", timeout=30000)
                             page.wait_for_timeout(1500)
 
                         # Screenshots
@@ -258,7 +259,7 @@ class AuditorRunner:
                     if info.run_at == "document-start":
                         page.add_init_script(info.raw_js)
 
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
 
                     if info.run_at != "document-start":
                         page.wait_for_timeout(1000)
@@ -335,7 +336,7 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
 
                     data = page.evaluate(
@@ -395,7 +396,7 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
                     results = search_dom(page, text=text, keyword=keyword, role=role, tag=tag)
                     return {"url": url, "matches_count": len(results), "matches": results}
@@ -427,7 +428,7 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1500)
 
                     interactor = PageInteractor(page)
@@ -464,7 +465,7 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
                     return test_rule_impact(page, css_rule, output_dir=output_dir)
                 finally:
@@ -491,7 +492,7 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
                     results = execute_action_sequence(page, actions)
                     return {"url": url, "action_results": results}
@@ -612,7 +613,7 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
                     res = check_page_contrast(page, css_content)
                     return {"url": url, "contrast_audit": res}
@@ -860,7 +861,7 @@ class AuditorRunner:
                     if info.run_at == "document-start":
                         page.add_init_script(info.raw_js)
 
-                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
 
                     if info.run_at != "document-start":
                         page.wait_for_timeout(1000)

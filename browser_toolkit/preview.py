@@ -5,6 +5,7 @@ from playwright.sync_api import sync_playwright
 
 from .profile import ZenProfileContext
 from .parser import parse_userstyle
+from .navigation import safe_goto
 
 JS_HOT_RELOAD = r"""(cssText) => {
     let style = document.getElementById('__browser_toolkit_live_css__');
@@ -53,7 +54,7 @@ def run_live_preview(
                 page = context.new_page()
 
             try:
-                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(1500)
 
                 while True:

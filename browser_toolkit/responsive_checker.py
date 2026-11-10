@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from playwright.sync_api import Page
+from .navigation import safe_goto
 
 
 @dataclass
@@ -274,9 +275,9 @@ class ResponsiveChecker:
     ) -> ResponsiveAuditReport:
         """Navigates to URL, checks each viewport, and returns an audit report."""
         if wait_network_idle:
-            page.goto(url, wait_until="networkidle", timeout=30000)
+            safe_goto(page, url, wait_until="networkidle", timeout=30000)
         else:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
 
         # Inject custom CSS if provided
         if self.custom_css:

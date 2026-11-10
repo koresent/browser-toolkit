@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page
+from .navigation import safe_goto
 
 JS_EXTRACT_PAGE_PALETTE = r"""() => {
     // Extract CSS custom properties from stylesheets
@@ -136,7 +137,7 @@ JS_EXTRACT_PAGE_PALETTE = r"""() => {
 
 
 def extract_site_palette(page: Page, url: str) -> Dict[str, Any]:
-    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
     page.wait_for_timeout(2000)
     raw = page.evaluate(JS_EXTRACT_PAGE_PALETTE)
     return {

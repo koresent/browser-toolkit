@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 
 from .profile import ZenProfileContext
+from .navigation import safe_goto
 
 COLOR_VAL_REGEX = re.compile(
     r"(#[0-9a-fA-F]{3,8}\b|rgba?\s*\(|hsla?\s*\(|color\s*\(|\b(transparent|currentcolor|white|black|red|green|blue|yellow|gray|grey)\b)",
@@ -119,7 +120,7 @@ def extract_colors_from_file_or_url(
                     page = ctx.new_page()
 
                 try:
-                    page.goto(target, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, target, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
                     raw_css = page.evaluate(
                         """() => {
