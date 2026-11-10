@@ -1,7 +1,7 @@
 [project]
-name = "browser-auditor"
+name = "browser-toolkit"
 version = "0.1.0"
-description = "Auditing, testing, and fixing tool for UserStyles and UserScripts using Zen Browser profile"
+description = "Auditing, testing, and fixing toolkit for UserStyles and UserScripts using Zen Browser profile"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,7 +9,8 @@ dependencies = [
 ]
 
 [project.scripts]
-browser-auditor = "browser_auditor.cli:main"
+browser-toolkit = "browser_toolkit.cli:main"
+browser-auditor = "browser_toolkit.cli:main"
 
 [build-system]
 requires = ["hatchling"]

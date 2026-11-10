@@ -145,8 +145,8 @@ def print_scan_summary(data: Dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="browser-auditor",
-        description="Audit and inspect UserStyles and UserScripts using Zen Browser profile and Playwright Gecko.",
+        prog="browser-toolkit",
+        description="Audit, inspect, and test UserStyles and UserScripts using Zen Browser profile and Playwright Gecko.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

@@ -53,7 +53,7 @@ def find_zen_profile(custom_path: Optional[str] = None) -> Optional[Path]:
                         if target.exists() and target.is_dir():
                             return target
         except Exception as e:
-            sys.stderr.write(f"[browser-auditor] Error reading profiles.ini: {e}\n")
+            sys.stderr.write(f"[browser-toolkit] Error reading profiles.ini: {e}\n")
 
     # Common default folder
     default_dir = zen_config / "default"
@@ -81,7 +81,7 @@ class ZenProfileContext:
 
         src_profile = find_zen_profile(self.profile_path)
         if not src_profile:
-            sys.stderr.write("[browser-auditor] Warning: Zen profile not found. Proceeding with clean profile.\n")
+            sys.stderr.write("[browser-toolkit] Warning: Zen profile not found. Proceeding with clean profile.\n")
             return None
 
         self.temp_dir = tempfile.mkdtemp(prefix="zen_audit_profile_")
@@ -154,4 +154,4 @@ class ZenProfileContext:
             try:
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
             except Exception as e:
-                sys.stderr.write(f"[browser-auditor] Error cleaning up temporary profile {self.temp_dir}: {e}\n")
+                sys.stderr.write(f"[browser-toolkit] Error cleaning up temporary profile {self.temp_dir}: {e}\n")

@@ -1,6 +1,6 @@
-# browser-auditor
+# browser-toolkit
 
-Комплексный инструмент автоматизированного тестирования, аудита и отладки **UserStyles** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
+Комплексный инструментарий автоматизированного тестирования, аудита и отладки **UserStyles** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
 
 ---
 
@@ -22,20 +22,20 @@
    - Отсекает дубликаты (не ходит по сотням похожих тем форума).
    - Работает «до победного»: краулит сайт до 100% покрытия селекторов или нахождения всех шаблонов.
 
-3. **Интеллектуальный поиск по DOM и генератор устойчивых селекторов (`search`):**
+4. **Интеллектуальный поиск по DOM и генератор устойчивых селекторов (`search`):**
    - Поиск элементов по тексту, ключевым словам в классах/ID/aria-атрибутах, ролям или тегам.
    - Автоматический синтез устойчивых CSS-селекторов (приоритет `data-testid`, `aria-*`, семантические селекторы вместо нестабильных хэшей CSS Modules).
 
-4. **Тестирование гипотез на лету (`test-rule`):**
+5. **Тестирование гипотез на лету (`test-rule`):**
    - Примерка CSS-правила на живой странице до изменения файла.
    - Оценка влияния (Impact Analysis): процент площади экрана, количество скрываемых элементов, предотвращение случайного скрытия контента страницы.
    - Автоматические скриншоты «ДО» и «ПОСЛЕ».
 
-5. **Интерактивные действия и скриншоты (`screenshot`, `interact`):**
+6. **Интерактивные действия и скриншоты (`screenshot`, `interact`):**
    - Скриншоты отдельных элементов (`--selector`), всей страницы (`--full-page`) или с наведением мыши (`--hover` для проверки меню и `:hover` состояний).
    - Выполнение цепочки действий пользователя (`click`, `hover`, `fill`, `press`, `wait`, `screenshot`) для тестирования модальных окон, дропдаунов и вкладок.
 
-6. **Аудит пользовательских скриптов (UserScripts):**
+7. **Аудит пользовательских скриптов (UserScripts):**
    - Внедрение полифиллов Greasemonkey/Tampermonkey API (`GM_getValue`, `GM_setValue`, `GM_xmlhttpRequest`, `GM_registerMenuCommand` и т.д.).
    - Перехват ошибок выполнения и логов консоли.
 
@@ -44,7 +44,7 @@
 ## Установка
 
 ```bash
-cd /home/koresent/Projects/personal/browser-auditor
+cd /home/koresent/Projects/personal/browser-toolkit
 uv venv
 uv pip install -e .
 ```
@@ -56,56 +56,65 @@ uv pip install -e .
 ### 1. Пакетное сканирование (`scan`)
 ```bash
 # Проверить здоровье всех стилей в папке habr:
-uv run browser-auditor scan /home/koresent/Projects/personal/userstyles/habr
+uv run browser-toolkit scan /home/koresent/Projects/personal/userstyles/habr
 
 # Вывести только сломанные файлы:
-uv run browser-auditor scan /home/koresent/Projects/personal/userstyles/ --only-broken
+uv run browser-toolkit scan /home/koresent/Projects/personal/userstyles/ --only-broken
 ```
 
 ### 2. Аудит одного стиля или скрипта (`audit`)
 ```bash
-# Аудит UserStyle:
-uv run browser-auditor audit /path/to/style.user.css
+# Базовый аудит UserStyle (с авто-выборкой подстраниц):
+uv run browser-toolkit audit /path/to/style.user.css
+
+# Аудит с глубокой охотой по уникальным архетипам сайта до победного:
+uv run browser-toolkit audit /path/to/style.user.css --deep-hunt
 
 # Аудит UserScript:
-uv run browser-auditor audit /path/to/script.user.js
+uv run browser-toolkit audit /path/to/script.user.js
 ```
 
-### 3. Поиск элементов и синтез селекторов (`search`)
+### 3. Картографирование макетов сайта (`map-site`)
+```bash
+uv run browser-toolkit map-site https://qna.habr.com --css /path/to/style.user.css --max-archetypes 5
+```
+
+### 4. Поиск элементов и синтез селекторов (`search`)
 ```bash
 # Найти все элементы, связанные с Copilot на GitHub:
-uv run browser-auditor search https://github.com --keyword "copilot"
+uv run browser-toolkit search https://github.com --keyword "copilot"
 
 # Найти кнопку по тексту:
-uv run browser-auditor search https://github.com --text "Sign out" --role button
+uv run browser-toolkit search https://github.com --text "Sign out" --role button
 ```
 
-### 4. Проверка правила на лету (`test-rule`)
+### 5. Проверка правила на лету (`test-rule`)
 ```bash
-uv run browser-auditor test-rule https://github.com --css 'button[aria-label="Open Copilot…"] { display: none !important; }'
+uv run browser-toolkit test-rule https://github.com --css 'button[aria-label="Open Copilot…"] { display: none !important; }'
 ```
 
-### 5. Скриншоты элементов и интерактивных состояний (`screenshot`)
+### 6. Скриншоты элементов и интерактивных состояний (`screenshot`)
 ```bash
 # Скриншот только шапки сайта:
-uv run browser-auditor screenshot https://github.com --selector "header" --output /tmp/header.png
+uv run browser-toolkit screenshot https://github.com --selector "header" --output /tmp/header.png
 
 # Скриншот выпадающего меню после наведения:
-uv run browser-auditor screenshot https://github.com --hover "#user-menu" --output /tmp/menu.png
+uv run browser-toolkit screenshot https://github.com --hover "#user-menu" --output /tmp/menu.png
 ```
 
-### 6. Цепочка интерактивных действий (`interact`)
+### 7. Цепочка интерактивных действий (`interact`)
 ```bash
-uv run browser-auditor interact https://github.com --actions '[
+uv run browser-toolkit interact https://github.com --actions '[
   {"action": "click", "selector": "button[aria-label=\\"Open Copilot…\\"]"},
   {"action": "wait", "ms": 1000},
   {"action": "screenshot", "path": "/tmp/copilot_opened.png"}
 ]'
 ```
 
-### 7. Инспекция селектора (`inspect`)
+### 8. Инспекция селектора (`inspect`)
 ```bash
-uv run browser-auditor inspect https://github.com --selector "header"
+uv run browser-toolkit inspect https://github.com --selector "header"
 ```
 
 Все команды поддерживают флаг `--json` для программной интеграции с агентами.
+Команда `browser-auditor` также сохранена как алиас для обратной совместимости.
