@@ -1,3 +1,4 @@
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -67,7 +68,8 @@ def test_rule_impact(
 ) -> Dict[str, Any]:
     pre_analysis = page.evaluate(JS_TEST_RULE_IMPACT, css_rule)
 
-    out_path = Path(output_dir or "./audit-results/rule-test").resolve()
+    default_dir = Path(tempfile.gettempdir()) / "browser-toolkit" / "rule-test"
+    out_path = Path(output_dir).resolve() if output_dir else default_dir
     out_path.mkdir(parents=True, exist_ok=True)
 
     before_img = out_path / "before_rule.png"

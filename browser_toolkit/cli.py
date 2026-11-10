@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
@@ -467,6 +468,9 @@ def print_diff_scripts(diff: Dict[str, Any]) -> None:
             print(f"  • [{oi['id']}] {oi['name']} (v{oi['version']})")
 
 
+TEMP_TOOLKIT_DIR = Path(tempfile.gettempdir()) / "browser-toolkit"
+
+
 def add_output_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--toon", action="store_true", help="Output result as TOON (Token-Oriented Object Notation)")
     p.add_argument("--json", action="store_true", help="Output result as compact JSON")
@@ -526,7 +530,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Command: screenshot
     shot_parser = subparsers.add_parser("screenshot", help="Capture page or element screenshot with hover/wait")
     shot_parser.add_argument("url", help="Target URL")
-    shot_parser.add_argument("--output", default="screenshot.png", help="Output image file path")
+    shot_parser.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "screenshot.png"), help="Output image file path (default: in /tmp/browser-toolkit)")
     shot_parser.add_argument("--selector", help="Capture only this element")
     shot_parser.add_argument("--hover", help="Hover over selector before screenshot")
     shot_parser.add_argument("--wait", help="Wait for selector before screenshot")
@@ -591,7 +595,7 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.add_argument("--headless", action="store_true", help="Run headless taking screenshots on change")
     preview_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     preview_parser.add_argument("--profile", help="Path to custom profile")
-    preview_parser.add_argument("--output", default="preview.png", help="Path to save preview screenshot")
+    preview_parser.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "preview.png"), help="Path to save preview screenshot (default: in /tmp/browser-toolkit)")
 
     # Command: extract-colors
     extract_colors_parser = subparsers.add_parser("extract-colors", help="Extract pure color skeleton from CSS file or URL (port of Extract-ThemeColors)")
@@ -651,7 +655,7 @@ def build_parser() -> argparse.ArgumentParser:
     preview_js_parser.add_argument("--headless", action="store_true", help="Run headless taking screenshots on change")
     preview_js_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     preview_js_parser.add_argument("--profile", help="Path to custom profile")
-    preview_js_parser.add_argument("--output", default="preview_js.png", help="Path to save preview screenshot")
+    preview_js_parser.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "preview_js.png"), help="Path to save preview screenshot (default: in /tmp/browser-toolkit)")
 
     # Command: ext (Extension management)
     ext_parser = subparsers.add_parser("ext", help="Manage Stylus and Violentmonkey extensions, styles, scripts, and sync")
@@ -708,9 +712,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(Path.home() / "Projects" / "personal" / "userscripts"),
         help="Local userscripts directory",
     )
-    backup_p.add_argument("--out-stylus", default="stylus-backup.json", help="Path for Stylus backup JSON")
+    backup_p.add_argument("--out-stylus", default=str(TEMP_TOOLKIT_DIR / "stylus-backup.json"), help="Path for Stylus backup JSON (default: in /tmp/browser-toolkit)")
     add_output_args(backup_p)
-    backup_p.add_argument("--out-vm", default="vm-backup.zip", help="Path for Violentmonkey backup ZIP")
+    backup_p.add_argument("--out-vm", default=str(TEMP_TOOLKIT_DIR / "vm-backup.zip"), help="Path for Violentmonkey backup ZIP (default: in /tmp/browser-toolkit)")
 
     # ext serve
     serve_p = ext_subparsers.add_parser("serve", help="Launch interactive 1-click install & sync server hub")

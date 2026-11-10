@@ -1,23 +1,24 @@
 # AGENTS.md — Browser Toolkit Operational Guide for AI Agents
 
-This document defines the interface, operational workflows, and extension protocols for AI coding agents (such as Antigravity, Claude Code, and other autonomous LLM agents) working with **Browser Toolkit**.
+This document defines the interface, operational principles, tool capabilities, and extensibility protocols for AI coding agents working with **Browser Toolkit**.
 
 ---
 
 ## 1. Operating Environment & Philosophy
 
-`browser-toolkit` is designed for autonomous agentic inspection, live reverse-engineering, authoring, auditing, and extension management for **UserStyles** (`.user.css`) and **UserScripts** (`.user.js`).
+`browser-toolkit` is an autonomous agentic toolkit for inspecting, reverse-engineering, authoring, auditing, and managing **UserStyles** (`.user.css`) and **UserScripts** (`.user.js`).
 
 ### Core Environment Constraints
 * **Engine**: Firefox / Gecko via Playwright (`p.firefox`). Target browser is Zen Browser.
-* **Profile Isolation**: Automatically clones the user's active Zen Browser profile to a temporary sandbox, allowing full access to authentic sessions, cookies, localStorage, and extension databases without locking the running browser.
-* **Token Efficiency First**: Agents must avoid verbose, decorative console output. Use structured formats (`--toon` or `--json`) to minimize token consumption and keep context windows compact.
+* **Profile Isolation**: Automatically clones the user's active Zen Browser profile to a temporary sandbox, allowing full access to authentic logins, cookies, localStorage, and extension databases without locking the running browser.
+* **Ephemeral Artifacts**: All generated screenshots, reports, and backup archives default to `/tmp/browser-toolkit/`. This keeps the repository workspace completely clean and allows OS cleaner utilities to prune temporary files automatically.
+* **Dynamic Agent Composition**: Do not follow hardcoded linear recipes. Select and compose tools dynamically based on the specific problem, observed DOM structure, and failure modes.
 
 ---
 
 ## 2. Mandatory Output Format for Agents: TOON Only
 
-While `browser-toolkit` supports human-readable text and JSON for developers and external shell scripts, **AI AGENTS MUST EXCLUSIVELY USE TOON (`--toon`)**.
+While `browser-toolkit` supports human-readable text and JSON for developers and shell scripts, **AI AGENTS MUST EXCLUSIVELY USE TOON (`--toon`)**.
 
 ### Why TOON is Mandatory for LLMs
 * **Context Preservation**: Eliminates repetitive dictionary keys, braces, and redundant quotes, slashing token usage by 40% to 60%.
@@ -29,14 +30,14 @@ Set the environment variable at the beginning of your agent execution session:
 ```bash
 export BROWSER_TOOLKIT_FORMAT=toon
 ```
-When `BROWSER_TOOLKIT_FORMAT=toon` is set, every subcommands automatically outputs TOON without requiring `--toon` on every invocation. If not set, always pass the `--toon` flag explicitly:
+When `BROWSER_TOOLKIT_FORMAT=toon` is set, every subcommand automatically outputs TOON without requiring `--toon` on every invocation. If not set, always pass the `--toon` flag explicitly:
 ```bash
 browser-toolkit <subcommand> [args] --toon
 ```
 
 **Rule for Agents**: Never request `--json` or unformatted human text output.
 
-Example TOON audit output:
+Example TOON output:
 ```yaml
 type: userstyle
 name: GitHub Gruvbox
@@ -51,114 +52,85 @@ dead_selectors[5]{selector,reason}:
 
 ---
 
-## 3. Standard Agent Workflows
+## 3. Dynamic Tool Catalog
 
-### Workflow A: Live Site Reconnaissance & Color Extraction
-Before writing or modifying a theme:
-1. **Map structural archetypes** across the target domain:
-   ```bash
-   browser-toolkit map-site https://example.com --max-archetypes 5 --toon
-   ```
-2. **Reverse engineer page palette & CSS custom properties**:
-   ```bash
-   browser-toolkit extract-palette https://example.com --toon
-   ```
-3. **Extract pure CSS color skeleton** (discarding layouts/fonts):
-   ```bash
-   browser-toolkit extract-colors https://example.com --output ./skeleton.css
-   ```
+Compose tools dynamically according to the user's goal:
 
-### Workflow B: Selector Discovery & Synthesis
-When finding elements to theme or script without manually guessing classes:
-1. **Synthesize resilient selectors**:
-   ```bash
-   browser-toolkit search https://example.com --text "Submit Order" --tag button --toon
-   browser-toolkit search https://example.com --keyword "navbar" --toon
-   ```
-   *The synthesizer prioritizes semantic IDs, `data-testid`, and stable class names over dynamic/obfuscated hashes (e.g. `.css-1x2y3z`).*
+### A. DOM Exploration & Selector Synthesis
+* **`search <url> [--text TEXT] [--keyword KW] [--role ROLE] [--tag TAG] --toon`**  
+  Synthesizes resilient CSS selectors scored by stability. Prefers semantic IDs, `data-testid`, and stable class names over obfuscated hashes (`.css-1x2y3z`).
+* **`inspect <url> --selector <sel> --toon`**  
+  Inspects computed styles, bounding box geometry, and outer HTML snippet of live elements.
+* **`map-site <url> [--max-archetypes N] [--css <path>] --toon`**  
+  Uses DOM structural fingerprinting (Jaccard similarity) to discover distinct page templates (home, search, item view, profile) while pruning duplicate forum threads or articles.
 
-### Workflow C: Safe Rule Testing & Impact Analysis
-Before modifying the user's stylesheet:
-1. **Test candidate CSS rule impact on live page**:
-   ```bash
-   browser-toolkit test-rule https://example.com --css ".header { background-color: #282828 !important; }" --toon
-   ```
-   *Reports matched elements, viewport coverage ratio (>25% flagged as high-impact), and saves before/after screenshots.*
+### B. Color & Theme Engineering
+* **`extract-palette <url> --toon`**  
+  Extracts native CSS custom properties (`--color-...`, `--bg-...`) and clusters background, text, and border colors by DOM frequency.
+* **`extract-colors <target> [--output PATH]`**  
+  Extracts a minimal CSS color skeleton from a stylesheet or URL, discarding layout, grid, and font rules.
+* **`test-rule <url> --css <rule> --toon`**  
+  Tests candidate CSS rule impact on live page without page reload. Flags elements covering >25% viewport and saves before/after screenshots to `/tmp/browser-toolkit/rule-test/`.
+* **`check-theme <url> [--css <path>] [--theme dark|light] --toon`**  
+  Detects dark theme flaws: bright background bleedthrough, unstyled native inputs, invisible text (WCAG contrast < 1.8:1), hidden SVG icons, and missing scrollbar styling.
+* **`check-contrast <url> [--css <path>] --toon`**  
+  Audits WCAG text contrast ratios across all visible text nodes on the styled page.
 
-### Workflow D: Visual Flaw & Accessibility Auditing
-1. **Check dark/light theme flaws**:
-   ```bash
-   browser-toolkit check-theme https://example.com --css ./style.user.css --theme dark --toon
-   ```
-   *Audits for bright background bleedthrough in dark mode, unstyled native `<input>` fields, invisible text (contrast ratio < 1.8:1), hidden SVG icons, and missing scrollbar theming.*
-2. **Audit responsive layout**:
-   ```bash
-   browser-toolkit check-responsive https://example.com --css ./style.user.css --toon
-   ```
-   *Tests across mobile, tablet, and desktop viewports for horizontal overflow blowout, touch targets under 24x24px, and clipped text.*
+### C. Responsive Layout Auditing
+* **`check-responsive <url> [--css <path>] [--viewports WxH,WxH] --toon`**  
+  Audits mobile, tablet, and desktop viewports for horizontal overflow blowout, touch targets under 24x24px, and clipped text. Screenshots saved to `/tmp/browser-toolkit/responsive/`.
 
-### Workflow E: UserScript Auditing & SPA Resilience
-1. **Audit script with GM polyfill shim**:
-   ```bash
-   browser-toolkit audit ./script.user.js --toon
-   ```
-   *Simulates GM API (`GM_setValue`, `GM_xmlhttpRequest`, `GM_setClipboard`), tracks DOM mutations, network requests, and console errors.*
-2. **Interactive script testing with user actions**:
-   ```bash
-   browser-toolkit test-script ./script.user.js --command "Toggle Dark Mode" --toon
-   ```
-3. **Verify resilience across SPA route navigations**:
-   ```bash
-   browser-toolkit check-spa ./script.user.js "https://github.com/org/repo" --toon
-   ```
-   *Simulates client-side transitions (Turbo, Next.js, YouTube) and verifies that injected UI elements persist or re-mount.*
+### D. UserScript Simulation & Verification
+* **`audit <script.user.js> [--url <url>] --toon`**  
+  Executes script with modern GM API polyfills (`GM_setValue`, `GM_xmlhttpRequest`, `GM_setClipboard`, `GM_registerMenuCommand`). Tracks DOM mutations, network requests, and errors.
+* **`test-script <script.user.js> [--command <cmd>] [--actions <json>] --toon`**  
+  Interactive script test invoking menu commands and user action sequences.
+* **`check-spa <script.user.js> <target_url> [--initial-url <url>] --toon`**  
+  Simulates client-side SPA route transitions (Turbo, Next.js, YouTube) and verifies that injected elements persist or re-mount without errors.
 
-### Workflow F: Programmatic Extension Management (Stylus & Violentmonkey)
-Agents can inspect and mutate extension state directly:
-1. **Check extension status**:
-   ```bash
-   browser-toolkit ext status --toon
-   ```
-2. **List and search installed items**:
-   ```bash
-   browser-toolkit ext list-styles --search "github" --toon
-   browser-toolkit ext list-scripts --search "youtube" --toon
-   ```
-3. **Install or update styles/scripts**:
-   ```bash
-   browser-toolkit ext install-style ./github.user.css --toon
-   browser-toolkit ext install-script ./enhancer.user.js --toon
-   ```
-4. **Toggle or delete styles/scripts**:
-   ```bash
-   browser-toolkit ext toggle-style "GitHub Gruvbox" --toon
-   browser-toolkit ext delete-script "Old Script" --toon
-   ```
-5. **Diff local repository files against browser database**:
-   ```bash
-   browser-toolkit ext diff-styles ~/Projects/personal/userstyles --toon
-   browser-toolkit ext diff-scripts ~/Projects/personal/userscripts --toon
-   ```
-6. **Launch local 1-click sync server**:
-   ```bash
-   browser-toolkit ext serve --port 8080
-   ```
+### E. Extension Management (Stylus & Violentmonkey)
+Direct programmatic access to browser extension state via IndexedDB:
+* **`ext status --toon`**: Profile path, database files, and active style/script counts.
+* **`ext list-styles [--search Q] --toon`**: List installed Stylus styles with enabled state and domains.
+* **`ext list-scripts [--search Q] --toon`**: List installed Violentmonkey scripts with versions and matches.
+* **`ext install-style <file.user.css> [--disabled] --toon`**: Install or update style in Stylus.
+* **`ext install-script <file.user.js> [--disabled] --toon`**: Install or update script in Violentmonkey.
+* **`ext enable-style <target> --toon`** / **`ext disable-style <target> --toon`**: Toggle style on/off.
+* **`ext toggle-style <target> --toon`**: Invert style enabled status.
+* **`ext delete-style <target> --toon`**: Remove style from Stylus.
+* **`ext enable-script <target> --toon`** / **`ext disable-script <target> --toon`**: Toggle script on/off.
+* **`ext toggle-script <target> --toon`**: Invert script enabled status.
+* **`ext delete-script <target> --toon`**: Remove script from Violentmonkey.
+* **`ext diff-styles <local_dir> --toon`**: Diff local repository files against active Stylus database.
+* **`ext diff-scripts <local_dir> --toon`**: Diff local repository files against active Violentmonkey database.
+* **`ext backup [--out-stylus PATH] [--out-vm PATH] --toon`**: Build ready-to-import backup bundles in `/tmp/browser-toolkit/`.
+* **`ext export-styles <dir>`** / **`ext export-scripts <dir>`**: Export database records as clean source files.
+* **`ext serve [--port 8080]`**: Launch local 1-click install & sync server hub.
+
+### F. Repository Scanning & Live Watchers
+* **`scan <dir> [--only-broken] --toon`**: Batch health audit across all `.user.css` and `.user.js` files in a folder.
+* **`preview <url> <style.user.css>`**: Live hot-reload watcher injecting CSS in <20ms without page refresh.
+* **`preview-js <script.user.js>`**: Live hot-reload watcher for scripts.
+
+### G. Browser Automation
+* **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] --toon`**: Capture viewport or element screenshot to `/tmp/browser-toolkit/screenshot.png`.
+* **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (click, hover, fill, wait).
 
 ---
 
 ## 4. Extensibility Protocol for AI Agents
 
-Agents modifying or extending `browser-toolkit` must adhere to the following rigid rules.
+When modifying or extending `browser-toolkit`, agents must adhere to the following rules:
 
 ### Rule 1: The Recurring-Need Gate (Anti-Bloat Filter)
-* **DO NOT** add new CLI commands, modules, or permanent features for one-off or two-off tasks.
-* If a task is specific to a single site edge-case or only needed once, write an ephemeral scratch script in the conversation's scratch directory.
+* **DO NOT** add new CLI commands or permanent modules for one-off tasks.
+* If a problem is unique to a single site or only needed once, write an ephemeral scratch script in the conversation's scratch directory.
 * A permanent tool is justified **ONLY** when:
   1. The functionality solves a recurring browser engineering problem across at least 3 distinct sites or styles/scripts.
   2. The capability cannot be composed cleanly from existing subcommands.
 
 ### Rule 2: Language & Comment Hygiene
-* **100% English**: All code, docstrings, CLI help messages, and comments must be strictly in English. Zero non-English characters in tracked files.
+* **100% English**: All code, docstrings, CLI help strings, and comments must be strictly in English. Zero non-English characters in tracked files.
 * **Antislop Comment Standards**:
   * Never use decorative comment borders (`// ====================`, `/* ---------- */`, `# ----------------`).
   * Never use step-by-step workflow narration (`# 1. Initialize`, `// 2. Fetch data`, `# 3. Return report`).
@@ -178,6 +150,7 @@ Agents modifying or extending `browser-toolkit` must adhere to the following rig
   ```
   All tests must pass cleanly.
 
-### Rule 5: Git Hygiene & Data Security
+### Rule 5: Artifact Hygiene & Data Security
+* All generated artifacts (screenshots, reports, dumps) must default to `/tmp/browser-toolkit/`.
 * Never commit secrets, tokens, cookies, or hardcoded user home paths (`/home/...`). Always resolve paths dynamically using `Path.home()`.
-* Never commit generated artifacts: screenshots (`*.png`, `*.jpg`), SQLite database backups (`*.sqlite.bak`), extension backup archives (`*.json`, `*.zip`), or debug logs. Verify `.gitignore` before staging.
+* Never commit generated artifacts or backups. Verify `.gitignore` before staging.

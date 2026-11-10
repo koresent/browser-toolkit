@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -48,7 +49,8 @@ class AuditorRunner:
         base_url = target_url or info.get_target_url()
         css_to_apply = info.get_combined_css_for_url(base_url)
 
-        out_path = Path(output_dir or f"./audit-results/{info.filepath.stem}").resolve()
+        default_out = Path(tempfile.gettempdir()) / "browser-toolkit" / "audit-results" / info.filepath.stem
+        out_path = Path(output_dir).resolve() if output_dir else default_out
         out_path.mkdir(parents=True, exist_ok=True)
 
         pages_to_test = list(urls) if urls else [base_url]
@@ -215,7 +217,8 @@ class AuditorRunner:
         info = parse_userscript(script_path)
         url = target_url or info.get_target_url()
 
-        out_path = Path(output_dir or f"./audit-results/{info.filepath.stem}").resolve()
+        default_out = Path(tempfile.gettempdir()) / "browser-toolkit" / "audit-results" / info.filepath.stem
+        out_path = Path(output_dir).resolve() if output_dir else default_out
         out_path.mkdir(parents=True, exist_ok=True)
 
         report: Dict[str, Any] = {
@@ -508,7 +511,8 @@ class AuditorRunner:
             info = parse_userstyle(css_path)
             css_content = info.get_combined_css_for_url(url)
 
-        out_path = Path(output_dir or "./audit-results/site-map").resolve()
+        default_out = Path(tempfile.gettempdir()) / "browser-toolkit" / "site-map"
+        out_path = Path(output_dir).resolve() if output_dir else default_out
         out_path.mkdir(parents=True, exist_ok=True)
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
@@ -819,7 +823,8 @@ class AuditorRunner:
         info = parse_userscript(script_path)
         url = target_url or info.get_target_url()
 
-        out_path = Path(output_dir or f"./audit-results/{info.filepath.stem}").resolve()
+        default_out = Path(tempfile.gettempdir()) / "browser-toolkit" / "audit-results" / info.filepath.stem
+        out_path = Path(output_dir).resolve() if output_dir else default_out
         out_path.mkdir(parents=True, exist_ok=True)
 
         report: Dict[str, Any] = {
