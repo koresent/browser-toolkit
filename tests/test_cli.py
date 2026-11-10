@@ -8,12 +8,15 @@ class TestCLI(unittest.TestCase):
         self.parser = build_parser()
 
     def test_audit_subcommand_args(self):
-        args = self.parser.parse_args(["audit", "style.user.css", "--url", "https://habr.com", "--deep-hunt", "--json"])
+        args = self.parser.parse_args(["audit", "style.user.css", "--url", "https://habr.com", "--deep-hunt", "--toon"])
         self.assertEqual(args.command, "audit")
         self.assertEqual(args.file, "style.user.css")
         self.assertEqual(args.url, "https://habr.com")
         self.assertTrue(args.deep_hunt)
-        self.assertTrue(args.json)
+        self.assertTrue(args.toon)
+
+        args_json = self.parser.parse_args(["audit", "style.user.css", "--json"])
+        self.assertTrue(args_json.json)
 
     def test_scan_subcommand_args(self):
         args = self.parser.parse_args(["scan", "/path/to/styles", "--only-broken"])
@@ -49,10 +52,10 @@ class TestCLI(unittest.TestCase):
 
     def test_ext_subcommands_args(self):
         # ext status
-        args = self.parser.parse_args(["ext", "status", "--json"])
+        args = self.parser.parse_args(["ext", "status", "--toon"])
         self.assertEqual(args.command, "ext")
         self.assertEqual(args.ext_action, "status")
-        self.assertTrue(args.json)
+        self.assertTrue(args.toon)
 
         # ext list-styles
         args = self.parser.parse_args(["ext", "list-styles", "--search", "habr"])
