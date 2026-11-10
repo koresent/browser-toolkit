@@ -16,12 +16,9 @@ from .scanner import scan_directory
 from .crawler import discover_sample_subpages
 from .archetype_crawler import crawl_site_archetypes, CrawlReport
 from .palette_extractor import extract_site_palette
-from .role_mapper import map_site_roles
-from .scaffolder import scaffold_gruvbox_theme
 from .contrast_checker import check_page_contrast
 from .preview import run_live_preview
 from .css_color_extractor import extract_colors_from_file_or_url
-from .modernizer import audit_modernity
 
 
 class AuditorRunner:
@@ -549,73 +546,6 @@ class AuditorRunner:
                 finally:
                     context.close()
 
-    def map_roles(self, url: str) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
-            with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
-                    page = context.new_page()
-
-                try:
-                    return map_site_roles(page, url)
-                finally:
-                    context.close()
-
-    def scaffold_theme(
-        self,
-        url: str,
-        name: Optional[str] = None,
-        variant: str = "dark",
-        modernize: bool = True,
-        output_path: Optional[str | Path] = None,
-    ) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
-            with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
-                    page = context.new_page()
-
-                try:
-                    palette_data = extract_site_palette(page, url)
-                    roles_data = map_site_roles(page, url)
-                    content = scaffold_gruvbox_theme(
-                        url=url,
-                        name=name,
-                        variant=variant,
-                        roles_data=roles_data,
-                        palette_data=palette_data,
-                        modernize=modernize,
-                        output_path=output_path,
-                    )
-                    return {
-                        "url": url,
-                        "name": name,
-                        "variant": variant,
-                        "output_path": str(output_path) if output_path else None,
-                        "content_length": len(content),
-                        "content": content,
-                    }
-                finally:
-                    context.close()
-
     def extract_css_colors(self, target: str, output_path: Optional[str | Path] = None) -> str:
         return extract_colors_from_file_or_url(
             target=target,
@@ -623,27 +553,6 @@ class AuditorRunner:
             profile_path=self.profile_path,
             use_profile=self.use_profile,
         )
-
-    def audit_site_modernity(self, url: str) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
-            with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
-                    page = context.new_page()
-
-                try:
-                    return audit_modernity(page, url)
-                finally:
-                    context.close()
 
     def check_contrast(self, url: str, css_path: Optional[str | Path] = None) -> Dict[str, Any]:
         css_content = None

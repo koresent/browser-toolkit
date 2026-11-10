@@ -245,26 +245,6 @@ def main() -> None:
     pal_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     pal_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
-    # Command: map-roles
-    roles_parser = subparsers.add_parser("map-roles", help="Map DOM elements to semantic roles (surfaces, text, controls)")
-    roles_parser.add_argument("url", help="Target URL")
-    roles_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    roles_parser.add_argument("--profile", help="Path to custom profile")
-    roles_parser.add_argument("--headful", action="store_true", help="Run with visible window")
-    roles_parser.add_argument("--json", action="store_true", help="Output result as JSON")
-
-    # Command: scaffold
-    scaffold_parser = subparsers.add_parser("scaffold", help="Generate Gruvbox .user.css boilerplate for site")
-    scaffold_parser.add_argument("url", help="Target URL")
-    scaffold_parser.add_argument("--name", help="Theme name (e.g. Wikipedia)")
-    scaffold_parser.add_argument("--variant", default="dark", choices=["dark", "dark-hard", "dark-soft", "light"], help="Gruvbox variant (default: dark)")
-    scaffold_parser.add_argument("--no-modernize", action="store_true", help="Do not inject modern 2026 UI enhancements (reading measure, scrollbars, rounded controls)")
-    scaffold_parser.add_argument("--output", help="File path to save the .user.css")
-    scaffold_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    scaffold_parser.add_argument("--profile", help="Path to custom profile")
-    scaffold_parser.add_argument("--headful", action="store_true", help="Run with visible window")
-    scaffold_parser.add_argument("--json", action="store_true", help="Output result as JSON")
-
     # Command: check-contrast
     contrast_parser = subparsers.add_parser("check-contrast", help="Audit WCAG text contrast across styled page")
     contrast_parser.add_argument("url", help="Target URL")
@@ -290,14 +270,6 @@ def main() -> None:
     extract_colors_parser.add_argument("--output", help="Path to write output CSS skeleton")
     extract_colors_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     extract_colors_parser.add_argument("--profile", help="Path to custom profile")
-
-    # Command: audit-layout
-    audit_layout_parser = subparsers.add_parser("audit-layout", help="Detect dated design flaws (cramped text, runaway line width, fixed tables)")
-    audit_layout_parser.add_argument("url", help="Target URL")
-    audit_layout_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    audit_layout_parser.add_argument("--profile", help="Path to custom profile")
-    audit_layout_parser.add_argument("--headful", action="store_true", help="Run with visible window")
-    audit_layout_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
@@ -500,43 +472,6 @@ def main() -> None:
             print(f"\nSVGs & Icons: {data.get('svg_count', 0)} SVG icons found on page.")
             print("=" * 60 + "\n")
 
-    elif args.command == "map-roles":
-        data = runner.map_roles(args.url)
-        if args.json:
-            print(json.dumps(data, indent=2, ensure_ascii=False))
-        else:
-            roles = data.get("roles", {})
-            print("\n" + "=" * 60)
-            print(f"🗺️ Semantic UI Roles on {args.url}")
-            print("-" * 60)
-            for role_name, items in roles.items():
-                print(f"\n[{role_name.upper()}] ({len(items)} selectors):")
-                for item in items[:5]:
-                    print(f"  • {item['selector']}")
-                if len(items) > 5:
-                    print(f"    ... and {len(items) - 5} more.")
-            print("=" * 60 + "\n")
-
-    elif args.command == "scaffold":
-        data = runner.scaffold_theme(
-            url=args.url,
-            name=args.name,
-            variant=args.variant,
-            modernize=not getattr(args, "no_modernize", False),
-            output_path=args.output,
-        )
-        if args.json:
-            print(json.dumps(data, indent=2, ensure_ascii=False))
-        else:
-            if args.output:
-                print(f"\n✨ Generated Gruvbox theme saved to: {args.output} ({data.get('content_length')} bytes)\n")
-            else:
-                print("\n" + "=" * 60)
-                print("✨ Generated Gruvbox Theme Draft:")
-                print("-" * 60)
-                print(data.get("content"))
-                print("=" * 60 + "\n")
-
     elif args.command == "check-contrast":
         data = runner.check_contrast(args.url, css_path=args.css)
         if args.json:
@@ -580,38 +515,6 @@ def main() -> None:
             print(f"🎨 Extracted Color Skeleton for {args.target}")
             print("-" * 60)
             print(res[:2000] + ("\n... [truncated]" if len(res) > 2000 else ""))
-            print("=" * 60 + "\n")
-
-    elif args.command == "audit-layout":
-        data = runner.audit_site_modernity(args.url)
-        if args.json:
-            print(json.dumps(data, indent=2, ensure_ascii=False))
-        else:
-            flaws = data.get("flaws", {})
-            print("\n" + "=" * 60)
-            print(f"📐 Layout & Modernity Audit on {args.url}")
-            print("-" * 60)
-            if flaws.get("datedFonts"):
-                print("⚠️ Dated Fonts Detected:")
-                for f in flaws["datedFonts"]:
-                    print(f"  • <{f['tag']}> {f['fontFamily']} (sample: \"{f['sampleText']}\")")
-            if flaws.get("crampedTypography"):
-                print("\n⚠️ Cramped Typography (Font < 14px or line-height < 1.35):")
-                for c in flaws["crampedTypography"]:
-                    print(f"  • <{c['tag']}> size: {c['fontSize']}, line-height ratio: {c['lineHeightRatio']} (sample: \"{c['sampleText']}\")")
-            if flaws.get("excessiveLineLength"):
-                print("\n⚠️ Excessive Line Width (>950px wide reading measure):")
-                for e in flaws["excessiveLineLength"]:
-                    print(f"  • <{e['tag']}> width: {e['width']} (sample: \"{e['sampleText']}\")")
-            if flaws.get("fixedWidthContainers"):
-                print("\n⚠️ Fixed Non-Responsive Containers:")
-                for w in flaws["fixedWidthContainers"]:
-                    print(f"  • <{w['tag']}> width: {w['fixedWidth']} (class: {w.get('className')})")
-            if flaws.get("tableLayouts"):
-                print(f"\n⚠️ Non-tabular layout tables detected: {len(flaws['tableLayouts'])}")
-
-            if not any(flaws.values()):
-                print("🎉 Layout appears modern and clean!")
             print("=" * 60 + "\n")
 
 
