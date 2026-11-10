@@ -88,6 +88,29 @@
 
 ---
 
+### 4. Инструментарий для UserScripts (.user.js)
+- **`test-script <file> [--url <url>] [--command <cmd>] [--actions <json>]`**:  
+  Глубокое тестирование логики скрипта с полным набором полифиллов `GM_*` и современного `GM.*` Promise API (с обходом CSP страницы):
+  - **DOM Mutation Tracking**: фиксирует все вставленные/удаленные узлы и измененные атрибуты;
+  - **Сетевой перехват**: лог запросов `GM_xmlhttpRequest` (URL, метод, статус, тело, время);
+  - **Тестирование команд меню**: вызов любой функции из `GM_registerMenuCommand` через `--command "Имя команды"`;
+  - **Буфер обмена и уведомления**: логирование вызовов `GM_setClipboard` и `GM_notification`.
+  ```bash
+  uv run browser-toolkit test-script /path/to/script.user.js --command "✅ Active Forks"
+  ```
+- **`check-spa <file> <target-spa-url> [--initial-url <url>]`**:  
+  Проверка устойчивости к SPA-навигации (GitHub Turbo, YouTube `yt-navigate-finish`, `popstate`, PJAX). Показывает, сохранились ли созданные скриптом кнопки и не возникло ли ошибок в обработчиках.
+  ```bash
+  uv run browser-toolkit check-spa /path/to/script.user.js https://github.com/koresent/browser-toolkit
+  ```
+- **`preview-js <file> [--url <url>]`**:  
+  Live Hot-Reload сервер для разработки скриптов. При каждом сохранении `.user.js` моментально перезагружает страницу в Zen Browser и выводит свежий лог мутаций DOM, сети и консоли.
+  ```bash
+  uv run browser-toolkit preview-js /path/to/script.user.js
+  ```
+
+---
+
 ## Установка
 
 ```bash

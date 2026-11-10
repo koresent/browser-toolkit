@@ -64,6 +64,8 @@ def print_script_summary(report: Dict[str, Any]) -> None:
     errors = audit.get("errors", [])
     commands = audit.get("registered_commands", [])
     console = audit.get("console_messages", [])
+    mutations = audit.get("dom_mutations", {})
+    net_reqs = audit.get("network_requests", [])
 
     print("\n" + "=" * 60)
     print(f"⚙️ UserScript Audit: {report.get('name')} (v{report.get('version', 'unknown')})")
@@ -73,7 +75,22 @@ def print_script_summary(report: Dict[str, Any]) -> None:
     print("-" * 60)
     print(f"Execution: {'✅ Success' if executed and not errors else '❌ Issues Detected'}")
     if commands:
-        print(f"Menu Commands: {', '.join(commands)}")
+        print(f"Menu Commands ({len(commands)}): {', '.join(commands)}")
+
+    added_cnt = mutations.get("added_count", 0)
+    if added_cnt > 0:
+        print(f"DOM Mutations: ➕ {added_cnt} elements added")
+        for node in mutations.get("added_nodes", [])[:5]:
+            snippet = f" (\"{node['text_snippet']}\")" if node.get("text_snippet") else ""
+            print(f"  • <{node.get('tag_name')}> {node.get('selector')}{snippet}")
+        if added_cnt > 5:
+            print(f"    ... and {added_cnt - 5} more added elements.")
+
+    if net_reqs:
+        print(f"\n🌐 Network Requests ({len(net_reqs)}):")
+        for req in net_reqs[:5]:
+            print(f"  • [{req.get('method', 'GET')}] {req.get('url')} (Status: {req.get('status') or req.get('error')})")
+
     print("-" * 60)
 
     if errors:
@@ -87,6 +104,104 @@ def print_script_summary(report: Dict[str, Any]) -> None:
             print(f"  [{msg.get('type', 'log')}] {msg.get('text', '')}")
 
     print("=" * 60 + "\n")
+
+
+def print_script_test_summary(report: Dict[str, Any]) -> None:
+    executed = report.get("executed", False)
+    errors = report.get("errors", [])
+    commands = report.get("registered_commands", [])
+    cmd_res = report.get("command_invocation_result")
+    mutations = report.get("dom_mutations", {})
+    added_nodes = mutations.get("added_nodes", [])
+    net_reqs = report.get("network_requests", [])
+    clip = report.get("clipboard_log", [])
+    notifs = report.get("notifications_log", [])
+    console = report.get("console_messages", [])
+
+    print("\n" + "=" * 70)
+    print(f"⚡ Interactive UserScript Test: {report.get('name')} (v{report.get('version', 'unknown')})")
+    print(f"🌐 Target:         {report.get('target_url')}")
+    print(f"📁 Script:         {report.get('script_file')}")
+    print(f"📸 Screenshot:     {report.get('screenshot')}")
+    print("-" * 70)
+    print(f"Status: {'✅ OK' if executed and not errors else '❌ Errors Detected'}")
+
+    if commands:
+        print(f"Registered Menu Commands: {', '.join(commands)}")
+
+    if cmd_res:
+        succ = cmd_res.get("success")
+        print(f"Menu Command Trigger: {'✅ Succeeded' if succ else '❌ Failed: ' + str(cmd_res.get('error'))}")
+
+    if added_nodes:
+        print(f"\n➕ DOM Elements Inserted by Script ({len(added_nodes)}):")
+        for n in added_nodes[:8]:
+            snippet = f" (\"{n['text_snippet']}\")" if n.get("text_snippet") else ""
+            print(f"  • <{n['tag_name']}> {n['selector']}{snippet}")
+        if len(added_nodes) > 8:
+            print(f"    ... and {len(added_nodes) - 8} more elements.")
+
+    if net_reqs:
+        print(f"\n🌐 Network Requests Sent ({len(net_reqs)}):")
+        for req in net_reqs:
+            st = req.get("status") if req.get("status") is not None else req.get("error")
+            print(f"  • [{req.get('method')}] {req.get('url')} -> {st} ({req.get('durationMs', 0)}ms)")
+
+    if clip:
+        print(f"\n📋 Clipboard Writes ({len(clip)}):")
+        for c in clip:
+            print(f"  • \"{c.get('text', '')[:60]}\"")
+
+    if notifs:
+        print(f"\n🔔 Notifications ({len(notifs)}):")
+        for n in notifs:
+            print(f"  • [{n.get('title')}] {n.get('text')}")
+
+    if errors:
+        print(f"\n❌ Uncaught Errors ({len(errors)}):")
+        for err in errors:
+            print(f"  • {err}")
+
+    if console:
+        print(f"\n💬 Console Output ({len(console)}):")
+        for msg in console[-10:]:
+            print(f"  [{msg.get('type')}] {msg.get('text')}")
+
+    print("=" * 70 + "\n")
+
+
+def print_spa_summary(report: Dict[str, Any]) -> None:
+    survived = report.get("survived", False)
+    retained = report.get("retained_selectors", [])
+    lost = report.get("lost_selectors", [])
+    errors = report.get("errors", [])
+
+    print("\n" + "=" * 70)
+    print(f"🔄 SPA Route Resilience Audit: {report.get('script')}")
+    print(f"Initial: {report.get('initial_url')}")
+    print(f"Target:  {report.get('target_url')}")
+    print("-" * 70)
+    status_str = "✅ SURVIVED SPA TRANSITION" if survived else "❌ BROKEN IN SPA ROUTING"
+    print(f"Verdict: {status_str}")
+    print(f"Inserted Elements: {report.get('initial_added_elements_count', 0)} initial -> {report.get('post_navigation_elements_count', 0)} retained")
+
+    if retained:
+        print("\n✅ Elements Retained After Transition:")
+        for sel in retained[:5]:
+            print(f"  • {sel}")
+
+    if lost:
+        print("\n❌ Elements Wiped Out During Transition:")
+        for sel in lost[:5]:
+            print(f"  • {sel}")
+        print("  💡 Tip: Listen to 'turbo:load', 'popstate', or 'yt-navigate-finish' to re-mount UI elements.")
+
+    if errors:
+        print(f"\n❌ Errors during transition ({len(errors)}):")
+        for err in errors:
+            print(f"  • {err}")
+
+    print("=" * 70 + "\n")
 
 
 def print_search_results(data: Dict[str, Any]) -> None:
@@ -400,6 +515,38 @@ def main() -> None:
     theme_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     theme_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
+    # Command: test-script
+    test_script_parser = subparsers.add_parser("test-script", help="Interactive UserScript testing with DOM mutations, network log, and menu command triggers")
+    test_script_parser.add_argument("file", help="Path to .user.js file")
+    test_script_parser.add_argument("--url", help="Override target URL")
+    test_script_parser.add_argument("--command", dest="menu_command", help="Invoke a registered GM_registerMenuCommand by name")
+    test_script_parser.add_argument("--actions", help="JSON string or file path containing user actions (click, hover, fill)")
+    test_script_parser.add_argument("--output", help="Output directory for screenshots and reports")
+    test_script_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    test_script_parser.add_argument("--profile", help="Path to custom profile")
+    test_script_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    test_script_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: check-spa
+    check_spa_parser = subparsers.add_parser("check-spa", help="Verify UserScript resilience across client-side SPA route transitions (Turbo, YouTube, etc.)")
+    check_spa_parser.add_argument("file", help="Path to .user.js file")
+    check_spa_parser.add_argument("target_url", help="Target SPA URL to navigate to (e.g. /watch?v=... or /tree/...)")
+    check_spa_parser.add_argument("--initial-url", help="Initial starting URL (defaults to script's first @match)")
+    check_spa_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    check_spa_parser.add_argument("--profile", help="Path to custom profile")
+    check_spa_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    check_spa_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: preview-js
+    preview_js_parser = subparsers.add_parser("preview-js", help="Live hot-reload preview server watching .user.js")
+    preview_js_parser.add_argument("file", help="Path to .user.js file to watch")
+    preview_js_parser.add_argument("--url", help="Target URL (defaults to script @match)")
+    preview_js_parser.add_argument("--headful", action="store_true", default=True, help="Run with visible Zen window (default)")
+    preview_js_parser.add_argument("--headless", action="store_true", help="Run headless taking screenshots on change")
+    preview_js_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    preview_js_parser.add_argument("--profile", help="Path to custom profile")
+    preview_js_parser.add_argument("--output", default="preview_js.png", help="Path to save preview screenshot")
+
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
 
@@ -679,6 +826,49 @@ def main() -> None:
             print(json.dumps(data, indent=2, ensure_ascii=False))
         else:
             print_theme_flaws_summary(data)
+
+    elif args.command == "test-script":
+        actions_list = None
+        if getattr(args, "actions", None):
+            try:
+                actions_list = json.loads(args.actions)
+            except Exception:
+                p = Path(args.actions)
+                if p.exists():
+                    actions_list = json.loads(p.read_text(encoding="utf-8"))
+
+        data = runner.test_script(
+            script_path=args.file,
+            target_url=getattr(args, "url", None),
+            invoke_command=getattr(args, "menu_command", None),
+            actions=actions_list,
+            output_dir=getattr(args, "output", None),
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print_script_test_summary(data)
+
+    elif args.command == "check-spa":
+        data = runner.check_spa(
+            script_path=args.file,
+            initial_url=getattr(args, "initial_url", None),
+            target_spa_url=args.target_url,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print_spa_summary(data)
+
+    elif args.command == "preview-js":
+        headful_mode = not getattr(args, "headless", False)
+        runner.preview_script(
+            url=getattr(args, "url", None),
+            script_path=args.file,
+            headful=headful_mode,
+            screenshot=True,
+            output_screenshot=args.output,
+        )
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 from .profile import ZenProfileContext
 from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page, CSSAuditResult
-from .js_auditor import inject_userscript, setup_js_listeners, JSAuditResult, GM_SHIM_JS
+from .js_auditor import inject_userscript, setup_js_listeners, JSAuditResult
 from .search import search_dom
 from .interaction import PageInteractor, execute_action_sequence
 from .test_rule import test_rule_impact
@@ -18,9 +18,13 @@ from .archetype_crawler import crawl_site_archetypes, CrawlReport
 from .palette_extractor import extract_site_palette
 from .contrast_checker import check_page_contrast
 from .preview import run_live_preview
+from .preview_js import run_live_script_preview
+from .spa_checker import check_spa_resilience
 from .css_color_extractor import extract_colors_from_file_or_url
 from .responsive_checker import ResponsiveChecker
 from .theme_flaw_checker import ThemeFlawChecker
+from .gm_shim import GM_FULL_SHIM_JS
+from .mutation_tracker import attach_mutation_tracker, collect_dom_mutations
 
 
 class AuditorRunner:
@@ -61,6 +65,7 @@ class AuditorRunner:
             with sync_playwright() as p:
                 launch_kwargs: Dict[str, Any] = {
                     "headless": self.headless,
+                    "bypass_csp": True,
                 }
 
                 if temp_profile:
@@ -71,8 +76,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -225,6 +230,7 @@ class AuditorRunner:
             with sync_playwright() as p:
                 launch_kwargs: Dict[str, Any] = {
                     "headless": self.headless,
+                    "bypass_csp": True,
                 }
 
                 if temp_profile:
@@ -235,14 +241,15 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
                     js_result = JSAuditResult()
                     setup_js_listeners(page, js_result)
-                    page.add_init_script(GM_SHIM_JS)
+                    page.add_init_script(GM_FULL_SHIM_JS)
+                    attach_mutation_tracker(page)
 
                     if info.run_at == "document-start":
                         page.add_init_script(info.raw_js)
@@ -258,23 +265,45 @@ class AuditorRunner:
                             js_result.eval_error = str(e)
                             js_result.errors.append(f"Eval error: {e}")
 
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(1500)
+
+                    # Extract commands, network, clipboard, mutations
+                    try:
+                        cmds = page.evaluate("() => Object.keys(window._gm_commands || {})")
+                        js_result.registered_commands = cmds
+                    except Exception:
+                        pass
+
+                    try:
+                        js_result.network_requests = page.evaluate("() => window._gm_network_log || []")
+                    except Exception:
+                        pass
+
+                    js_result.mutations = collect_dom_mutations(page)
 
                     screenshot_path = out_path / "script_applied.png"
                     page.screenshot(path=str(screenshot_path), full_page=False)
                     report["screenshot"] = str(screenshot_path)
-
-                    try:
-                        commands = page.evaluate("() => window._gm_registered_commands || []")
-                        js_result.registered_commands = commands
-                    except Exception:
-                        pass
 
                     report["js_audit"] = {
                         "executed": js_result.executed,
                         "eval_error": js_result.eval_error,
                         "errors": js_result.errors,
                         "registered_commands": js_result.registered_commands,
+                        "network_requests": js_result.network_requests,
+                        "dom_mutations": {
+                            "added_count": len(js_result.mutations.added_nodes),
+                            "added_nodes": [
+                                {
+                                    "selector": n.selector,
+                                    "tag_name": n.tag_name,
+                                    "text_snippet": n.text_snippet,
+                                }
+                                for n in js_result.mutations.added_nodes[:15]
+                            ],
+                            "removed_count": len(js_result.mutations.removed_nodes),
+                            "attributes_modified_count": len(js_result.mutations.attribute_mutations),
+                        },
                         "console_messages": js_result.console_messages[-30:],
                     }
                 finally:
@@ -348,7 +377,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -357,8 +386,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -380,7 +409,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -389,8 +418,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -417,7 +446,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -426,8 +455,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -444,7 +473,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -453,8 +482,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -483,7 +512,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -492,8 +521,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -530,7 +559,7 @@ class AuditorRunner:
     def extract_palette(self, url: str) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -539,8 +568,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -564,7 +593,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -573,8 +602,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -709,7 +738,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
                 if temp_profile:
                     context = p.firefox.launch_persistent_context(
                         user_data_dir=str(temp_profile),
@@ -718,8 +747,8 @@ class AuditorRunner:
                     )
                     page = context.new_page() if not context.pages else context.pages[0]
                 else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
                     page = context.new_page()
 
                 try:
@@ -777,3 +806,215 @@ class AuditorRunner:
                     }
                 finally:
                     context.close()
+
+    def test_script(
+        self,
+        script_path: str | Path,
+        target_url: Optional[str] = None,
+        invoke_command: Optional[str] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
+        output_dir: Optional[str | Path] = None,
+    ) -> Dict[str, Any]:
+        info = parse_userscript(script_path)
+        url = target_url or info.get_target_url()
+
+        out_path = Path(output_dir or f"./audit-results/{info.filepath.stem}").resolve()
+        out_path.mkdir(parents=True, exist_ok=True)
+
+        report: Dict[str, Any] = {
+            "type": "userscript_test",
+            "name": info.name or info.filepath.name,
+            "version": info.version,
+            "target_url": url,
+            "script_file": str(info.filepath),
+            "output_dir": str(out_path),
+        }
+
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
+                    page = context.new_page()
+
+                try:
+                    js_result = JSAuditResult()
+                    setup_js_listeners(page, js_result)
+                    page.add_init_script(GM_FULL_SHIM_JS)
+                    attach_mutation_tracker(page)
+
+                    if info.run_at == "document-start":
+                        page.add_init_script(info.raw_js)
+
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+                    if info.run_at != "document-start":
+                        page.wait_for_timeout(1000)
+                        try:
+                            page.evaluate(info.raw_js)
+                            js_result.executed = True
+                        except Exception as e:
+                            js_result.eval_error = str(e)
+                            js_result.errors.append(f"Eval error: {e}")
+
+                    page.wait_for_timeout(1000)
+
+                    # Extract commands
+                    try:
+                        cmds = page.evaluate("() => Object.keys(window._gm_commands || {})")
+                        js_result.registered_commands = cmds
+                    except Exception:
+                        pass
+
+                    # Invoke command if requested
+                    if invoke_command:
+                        try:
+                            cmd_res = page.evaluate(f"window._gm_invoke_command({invoke_command!r})")
+                            js_result.command_invocation_result = cmd_res
+                            if not cmd_res.get("success"):
+                                js_result.errors.append(f"Command '{invoke_command}' error: {cmd_res.get('error')}")
+                            page.wait_for_timeout(500)
+                        except Exception as e:
+                            js_result.command_invocation_result = {"success": False, "error": str(e)}
+                            js_result.errors.append(f"Failed to invoke '{invoke_command}': {e}")
+
+                    # Execute interactive actions if provided
+                    if actions:
+                        interactor = PageInteractor(page)
+                        execute_action_sequence(interactor, actions)
+                        page.wait_for_timeout(500)
+
+                    # Extract network requests
+                    try:
+                        js_result.network_requests = page.evaluate("() => window._gm_network_log || []")
+                    except Exception:
+                        pass
+
+                    # Extract clipboard & notifications
+                    try:
+                        js_result.clipboard_log = page.evaluate("() => window._gm_clipboard_log || []")
+                        js_result.notifications_log = page.evaluate("() => window._gm_notifications_log || []")
+                    except Exception:
+                        pass
+
+                    # Extract mutations
+                    js_result.mutations = collect_dom_mutations(page)
+
+                    screenshot_path = out_path / "script_test.png"
+                    page.screenshot(path=str(screenshot_path), full_page=False)
+
+                    report["executed"] = js_result.executed
+                    report["errors"] = js_result.errors
+                    report["registered_commands"] = js_result.registered_commands
+                    report["command_invocation_result"] = js_result.command_invocation_result
+                    report["network_requests"] = js_result.network_requests
+                    report["clipboard_log"] = js_result.clipboard_log
+                    report["notifications_log"] = js_result.notifications_log
+                    report["dom_mutations"] = {
+                        "added_nodes": [
+                            {
+                                "selector": n.selector,
+                                "tag_name": n.tag_name,
+                                "id": n.id,
+                                "class_name": n.class_name,
+                                "text_snippet": n.text_snippet,
+                                "html_snippet": n.html_snippet,
+                            }
+                            for n in js_result.mutations.added_nodes
+                        ],
+                        "removed_nodes": [
+                            {
+                                "tag_name": r.tag_name,
+                                "id": r.id,
+                                "class_name": r.class_name,
+                            }
+                            for r in js_result.mutations.removed_nodes
+                        ],
+                        "attribute_mutations": [
+                            {
+                                "selector": a.selector,
+                                "attribute_name": a.attribute_name,
+                                "old_value": a.old_value,
+                                "new_value": a.new_value,
+                            }
+                            for a in js_result.mutations.attribute_mutations
+                        ],
+                    }
+                    report["console_messages"] = js_result.console_messages[-30:]
+                    report["screenshot"] = str(screenshot_path)
+                    return report
+                finally:
+                    context.close()
+
+    def check_spa(
+        self,
+        script_path: str | Path,
+        initial_url: Optional[str] = None,
+        target_spa_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        info = parse_userscript(script_path)
+        i_url = initial_url or info.get_target_url()
+        t_url = target_spa_url or i_url
+
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(headless=self.headless)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
+                    page = context.new_page()
+
+                try:
+                    rep = check_spa_resilience(
+                        page=page,
+                        initial_url=i_url,
+                        target_spa_url=t_url,
+                        raw_js=info.raw_js,
+                        run_at=info.run_at or "document-end",
+                    )
+                    return {
+                        "script": info.name or info.filepath.name,
+                        "initial_url": rep.initial_url,
+                        "target_url": rep.target_url,
+                        "survived": rep.survived,
+                        "initial_added_elements_count": rep.initial_added_elements_count,
+                        "post_navigation_elements_count": rep.post_navigation_elements_count,
+                        "retained_selectors": rep.retained_selectors,
+                        "lost_selectors": rep.lost_selectors,
+                        "errors": rep.errors_during_navigation,
+                    }
+                finally:
+                    context.close()
+
+    def preview_script(
+        self,
+        url: str,
+        script_path: str | Path,
+        headful: bool = True,
+        screenshot: bool = True,
+        output_screenshot: str = "preview_js.png",
+    ) -> None:
+        run_live_script_preview(
+            url=url,
+            script_path=script_path,
+            profile_path=self.profile_path,
+            use_profile=self.use_profile,
+            headless=not headful,
+            screenshot_on_change=screenshot,
+            output_screenshot=output_screenshot,
+        )
