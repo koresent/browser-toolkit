@@ -300,45 +300,56 @@ class ExtensionManager:
         if not db_path:
             return []
 
-        reader = FileReader(str(db_path))
         scripts_map: Dict[int, ViolentmonkeyScript] = {}
         code_map: Dict[int, str] = {}
 
-        for rec in reader.Records():
-            key = rec.key.value if hasattr(rec.key, "value") else str(rec.key)
-            val = rec.value
+        for attempt in range(4):
+            try:
+                reader = FileReader(str(db_path))
+                scripts_map.clear()
+                code_map.clear()
 
-            if key.startswith("scr:"):
-                try:
-                    s_id = int(key.split(":", 1)[1])
-                except ValueError:
+                for rec in reader.Records():
+                    key = rec.key.value if hasattr(rec.key, "value") else str(rec.key)
+                    val = rec.value
+
+                    if key.startswith("scr:"):
+                        try:
+                            s_id = int(key.split(":", 1)[1])
+                        except ValueError:
+                            continue
+
+                        if isinstance(val, dict):
+                            meta = val.get("meta") or {}
+                            custom = val.get("custom") or {}
+                            name = custom.get("name") or meta.get("name") or f"Script #{s_id}"
+                            version = meta.get("version", "1.0.0")
+                            enabled = bool(val.get("config", {}).get("enabled", True))
+                            matches = list(getattr(meta.get("match"), "values", meta.get("match") or []))
+
+                            scripts_map[s_id] = ViolentmonkeyScript(
+                                id=s_id,
+                                name=name,
+                                version=version,
+                                enabled=enabled,
+                                matches=matches,
+                                custom=custom,
+                                meta=meta,
+                            )
+
+                    elif key.startswith("code:"):
+                        try:
+                            c_id = int(key.split(":", 1)[1])
+                        except ValueError:
+                            continue
+                        if isinstance(val, str):
+                            code_map[c_id] = val
+                break
+            except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+                if attempt < 3 and "locked" in str(e).lower():
+                    time.sleep(0.4)
                     continue
-
-                if isinstance(val, dict):
-                    meta = val.get("meta") or {}
-                    custom = val.get("custom") or {}
-                    name = custom.get("name") or meta.get("name") or f"Script #{s_id}"
-                    version = meta.get("version", "1.0.0")
-                    enabled = bool(val.get("config", {}).get("enabled", True))
-                    matches = list(getattr(meta.get("match"), "values", meta.get("match") or []))
-
-                    scripts_map[s_id] = ViolentmonkeyScript(
-                        id=s_id,
-                        name=name,
-                        version=version,
-                        enabled=enabled,
-                        matches=matches,
-                        custom=custom,
-                        meta=meta,
-                    )
-
-            elif key.startswith("code:"):
-                try:
-                    c_id = int(key.split(":", 1)[1])
-                except ValueError:
-                    continue
-                if isinstance(val, str):
-                    code_map[c_id] = val
+                raise
 
         for s_id, script in scripts_map.items():
             if s_id in code_map:

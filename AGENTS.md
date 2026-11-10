@@ -35,7 +35,10 @@ When `BROWSER_TOOLKIT_FORMAT=toon` is set, every subcommand automatically output
 browser-toolkit <subcommand> [args] --toon
 ```
 
-**Rule for Agents**: Never request `--json` or unformatted human text output.
+**Rules for Agents**:
+* Never request `--json` or unformatted human text output.
+* Never use `pprint.pprint()`, raw `print(dict)`, or `json.dumps()` in helper or scratch scripts to dump massive DOM trees, styling chains, or dictionaries into stdout.
+* If generating structured output in helper scripts, serialize it via TOON (`from browser_toolkit.formatters import to_toon`) to preserve context and avoid token exhaustion.
 
 Example TOON output:
 ```yaml
@@ -124,7 +127,8 @@ When modifying or extending `browser-toolkit`, agents must adhere to the followi
 
 ### Rule 1: The Recurring-Need Gate (Anti-Bloat Filter)
 * **DO NOT** add new CLI commands or permanent modules for one-off tasks.
-* If a problem is unique to a single site or only needed once, write an ephemeral scratch script in the conversation's scratch directory.
+* **DO NOT re-implement browser-toolkit capabilities in scratch scripts**: Never write ad-hoc Playwright scripts that duplicate existing CLI commands (`inspect`, `search`, `test-rule`, `check-theme`, `screenshot`, `extract-palette`, etc.). The CLI is already battle-tested for profile cloning, redirect resilience, and token efficiency.
+* Ephemeral scratch scripts in the conversation's scratch directory are reserved **ONLY** for genuine one-off tasks that cannot be accomplished with existing CLI commands.
 * A permanent tool is justified **ONLY** when:
   1. The functionality solves a recurring browser engineering problem across at least 3 distinct sites or styles/scripts.
   2. The capability cannot be composed cleanly from existing subcommands.
