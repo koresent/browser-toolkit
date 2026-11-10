@@ -547,6 +547,63 @@ def main() -> None:
     preview_js_parser.add_argument("--profile", help="Path to custom profile")
     preview_js_parser.add_argument("--output", default="preview_js.png", help="Path to save preview screenshot")
 
+    # Command: ext (Extension management)
+    ext_parser = subparsers.add_parser("ext", help="Manage Stylus and Violentmonkey extensions, styles, scripts, and sync")
+    ext_subparsers = ext_parser.add_subparsers(dest="ext_action", required=True)
+
+    # ext status
+    status_p = ext_subparsers.add_parser("status", help="Show installed extensions, active profiles, and database stats")
+    status_p.add_argument("--profile", help="Path to custom profile")
+    status_p.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # ext list-styles
+    ls_styles_p = ext_subparsers.add_parser("list-styles", help="List all styles installed in Stylus")
+    ls_styles_p.add_argument("--search", help="Filter styles by name or domain keyword")
+    ls_styles_p.add_argument("--profile", help="Path to custom profile")
+    ls_styles_p.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # ext list-scripts
+    ls_scripts_p = ext_subparsers.add_parser("list-scripts", help="List all scripts installed in Violentmonkey")
+    ls_scripts_p.add_argument("--search", help="Filter scripts by name or match keyword")
+    ls_scripts_p.add_argument("--profile", help="Path to custom profile")
+    ls_scripts_p.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # ext export-styles
+    exp_styles_p = ext_subparsers.add_parser("export-styles", help="Export all styles from Stylus DB as clean .user.css files")
+    exp_styles_p.add_argument("out_dir", help="Directory to save .user.css files")
+    exp_styles_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext export-scripts
+    exp_scripts_p = ext_subparsers.add_parser("export-scripts", help="Export all scripts from Violentmonkey DB as .user.js files")
+    exp_scripts_p.add_argument("out_dir", help="Directory to save .user.js files")
+    exp_scripts_p.add_argument("--profile", help="Path to custom profile")
+
+    # ext diff-styles
+    diff_styles_p = ext_subparsers.add_parser("diff-styles", help="Compare local .user.css files with active Stylus database")
+    diff_styles_p.add_argument("local_dir", help="Path to local folder with userstyles")
+    diff_styles_p.add_argument("--profile", help="Path to custom profile")
+    diff_styles_p.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # ext diff-scripts
+    diff_scripts_p = ext_subparsers.add_parser("diff-scripts", help="Compare local .user.js files with active Violentmonkey database")
+    diff_scripts_p.add_argument("local_dir", help="Path to local folder with userscripts")
+    diff_scripts_p.add_argument("--profile", help="Path to custom profile")
+    diff_scripts_p.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # ext backup
+    backup_p = ext_subparsers.add_parser("backup", help="Build ready-to-import backup bundles for Stylus and Violentmonkey")
+    backup_p.add_argument("--styles-dir", default="/home/koresent/Projects/personal/userstyles", help="Local userstyles directory")
+    backup_p.add_argument("--scripts-dir", default="/home/koresent/Projects/personal/userscripts", help="Local userscripts directory")
+    backup_p.add_argument("--out-stylus", default="stylus-backup.json", help="Path for Stylus backup JSON")
+    backup_p.add_argument("--out-vm", default="vm-backup.zip", help="Path for Violentmonkey backup ZIP")
+
+    # ext serve
+    serve_p = ext_subparsers.add_parser("serve", help="Launch interactive 1-click install & sync server hub")
+    serve_p.add_argument("--port", type=int, default=8080, help="Server port (default: 8080)")
+    serve_p.add_argument("--styles-dir", help="Custom userstyles directory")
+    serve_p.add_argument("--scripts-dir", help="Custom userscripts directory")
+    serve_p.add_argument("--profile", help="Path to custom profile")
+
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
 
@@ -869,6 +926,131 @@ def main() -> None:
             screenshot=True,
             output_screenshot=args.output,
         )
+
+    elif args.command == "ext":
+        action = args.ext_action
+        if action == "status":
+            st = runner.ext_status()
+            if args.json:
+                print(json.dumps(st, indent=2, ensure_ascii=False))
+            else:
+                print("\n" + "=" * 65)
+                print("🧩 Zen Browser Extension Status")
+                print("-" * 65)
+                print(f"Profile directory:  {st['profile_dir']}")
+                print(f"Stylus DB:          {st['stylus_db']}")
+                print(f"Violentmonkey DB:   {st['violentmonkey_db']}")
+                print("-" * 65)
+                print(f"🎨 Stylus Styles:        {st['stylus_installed_count']} installed ({st['active_styles_count']} active)")
+                print(f"⚙️ Violentmonkey Scripts: {st['violentmonkey_installed_count']} installed ({st['active_scripts_count']} active)")
+                print("=" * 65 + "\n")
+
+        elif action == "list-styles":
+            styles = runner.ext_list_styles()
+            if getattr(args, "search", None):
+                q = args.search.lower()
+                styles = [s for s in styles if q in s["name"].lower() or any(q in d.lower() for d in s["domains"])]
+            if args.json:
+                print(json.dumps(styles, indent=2, ensure_ascii=False))
+            else:
+                print("\n" + "=" * 70)
+                print(f"🎨 Stylus Installed Styles ({len(styles)}):")
+                print("-" * 70)
+                for s in styles:
+                    status_badge = "✅" if s["enabled"] else "⏸️"
+                    doms = ", ".join(s["domains"][:2]) if s["domains"] else "all sites"
+                    print(f"  {status_badge} [{s['id']:<3}] {s['name']:<42} -> {doms}")
+                print("=" * 70 + "\n")
+
+        elif action == "list-scripts":
+            scripts = runner.ext_list_scripts()
+            if getattr(args, "search", None):
+                q = args.search.lower()
+                scripts = [sc for sc in scripts if q in sc["name"].lower() or any(q in m.lower() for m in sc["matches"])]
+            if args.json:
+                print(json.dumps(scripts, indent=2, ensure_ascii=False))
+            else:
+                print("\n" + "=" * 70)
+                print(f"⚙️ Violentmonkey Installed Scripts ({len(scripts)}):")
+                print("-" * 70)
+                for sc in scripts:
+                    status_badge = "✅" if sc["enabled"] else "⏸️"
+                    matches = ", ".join(sc["matches"][:2]) if sc["matches"] else "*://*/*"
+                    print(f"  {status_badge} [{sc['id']:<3}] {sc['name']:<40} (v{sc['version']}) -> {matches}")
+                print("=" * 70 + "\n")
+
+        elif action == "export-styles":
+            count = runner.ext_export_styles(args.out_dir)
+            print(f"\n✨ Exported {count} styles from Stylus DB to: {args.out_dir}\n")
+
+        elif action == "export-scripts":
+            count = runner.ext_export_scripts(args.out_dir)
+            print(f"\n✨ Exported {count} scripts from Violentmonkey DB to: {args.out_dir}\n")
+
+        elif action == "diff-styles":
+            diff = runner.ext_diff_styles(args.local_dir)
+            if args.json:
+                print(json.dumps(diff, indent=2, ensure_ascii=False))
+            else:
+                print("\n" + "=" * 70)
+                print(f"🔍 UserStyles Sync Diff: Local ({args.local_dir}) vs Stylus DB")
+                print(f"Local files: {diff['total_local']} | Installed in Stylus: {diff['total_installed']} | In Sync: {diff['in_sync']}")
+                print("-" * 70)
+                if diff["modified"]:
+                    print(f"\n⚠️ Modified / Out of Sync ({len(diff['modified'])}):")
+                    for m in diff["modified"]:
+                        print(f"  • {m['name']} ({m['file']}) [Local: {m['local_size']}B, Stylus: {m['installed_size']}B]")
+                if diff["only_local"]:
+                    print(f"\n➕ Only Local (Not in Stylus) ({len(diff['only_local'])}):")
+                    for ol in diff["only_local"][:10]:
+                        print(f"  • {ol['name']} ({ol['file']})")
+                if diff["only_installed"]:
+                    print(f"\n📦 Only in Stylus (Missing in git repo) ({len(diff['only_installed'])}):")
+                    for oi in diff["only_installed"][:10]:
+                        print(f"  • [{oi['id']}] {oi['name']}")
+                print("=" * 70 + "\n")
+
+        elif action == "diff-scripts":
+            diff = runner.ext_diff_scripts(args.local_dir)
+            if args.json:
+                print(json.dumps(diff, indent=2, ensure_ascii=False))
+            else:
+                print("\n" + "=" * 70)
+                print(f"🔍 UserScripts Sync Diff: Local ({args.local_dir}) vs Violentmonkey DB")
+                print(f"Local files: {diff['total_local']} | Installed in VM: {diff['total_installed']} | In Sync: {diff['in_sync']}")
+                print("-" * 70)
+                if diff["modified"]:
+                    print(f"\n⚠️ Modified / Out of Sync ({len(diff['modified'])}):")
+                    for m in diff["modified"]:
+                        print(f"  • {m['name']} ({m['file']}) [Local: {m['local_size']}B, VM: {m['installed_size']}B]")
+                if diff["only_local"]:
+                    print(f"\n➕ Only Local (Not in VM) ({len(diff['only_local'])}):")
+                    for ol in diff["only_local"][:10]:
+                        print(f"  • {ol['name']} ({ol['file']})")
+                if diff["only_installed"]:
+                    print(f"\n📦 Only in Violentmonkey (Missing in git repo) ({len(diff['only_installed'])}):")
+                    for oi in diff["only_installed"][:10]:
+                        print(f"  • [{oi['id']}] {oi['name']} (v{oi['version']})")
+                print("=" * 70 + "\n")
+
+        elif action == "backup":
+            styles_cnt = runner.ext_build_stylus_backup(args.styles_dir, args.out_stylus)
+            vm_cnt = runner.ext_build_vm_backup(args.scripts_dir, args.out_vm)
+            print("\n" + "=" * 65)
+            print("📦 Extension Backup Bundles Built Successfully:")
+            print(f"  • Stylus JSON:         {args.out_stylus} ({styles_cnt} styles bundled)")
+            print(f"  • Violentmonkey ZIP:   {args.out_vm} ({vm_cnt} scripts bundled)")
+            print("-" * 65)
+            print("💡 In Stylus: Manage -> Import -> select JSON")
+            print("💡 In Violentmonkey: Settings -> Import from zip -> select ZIP")
+            print("=" * 65 + "\n")
+
+        elif action == "serve":
+            runner.ext_serve(
+                port=args.port,
+                styles_dir=getattr(args, "styles_dir", None),
+                scripts_dir=getattr(args, "scripts_dir", None),
+            )
 
 
 if __name__ == "__main__":

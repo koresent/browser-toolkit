@@ -111,6 +111,50 @@
 
 ---
 
+### 5. Управление расширениями Stylus и Violentmonkey (`ext`)
+Прямое подключение к базам данных SQLite/IndexedDB расширений профиля Zen Browser:
+- **`ext status`**:  
+  Показывает расположение профиля Zen, пути к базам данных расширений Stylus и Violentmonkey, количество установленных и активных стилей и скриптов.
+  ```bash
+  uv run browser-toolkit ext status
+  ```
+- **`ext list-styles [--search <query>]`**:  
+  Список всех стилей, установленных в Stylus (статус активности, ID, целевые домены).
+  ```bash
+  uv run browser-toolkit ext list-styles --search "habr"
+  ```
+- **`ext list-scripts [--search <query>]`**:  
+  Список всех скриптов, установленных в Violentmonkey (статус активности, версия, правила `@match`).
+  ```bash
+  uv run browser-toolkit ext list-scripts
+  ```
+- **`ext diff-styles <local_dir>` / `ext diff-scripts <local_dir>`**:  
+  Сравнение локальных файлов репозитория (`.user.css` / `.user.js`) с активной базой браузера. Выявляет:
+  - Стили и скрипты, которые рассинхронизировались по содержимому (изменены локально или в браузере);
+  - Новые локальные файлы, еще не установленные в браузер;
+  - Элементы, установленные в браузере, но отсутствующие в git-репозитории.
+  ```bash
+  uv run browser-toolkit ext diff-styles /home/koresent/Projects/personal/userstyles
+  uv run browser-toolkit ext diff-scripts /home/koresent/Projects/personal/userscripts
+  ```
+- **`ext export-styles <out_dir>` / `ext export-scripts <out_dir>`**:  
+  Прямой дамп всей базы Stylus или Violentmonkey в чистые `.user.css` и `.user.js` файлы на диск.
+  ```bash
+  uv run browser-toolkit ext export-styles ./dump-styles/
+  ```
+- **`ext backup [--styles-dir <dir>] [--scripts-dir <dir>]`**:  
+  Сборка готовых бандлов резервных копий: `stylus-backup.json` (импортируется в Stylus в 1 клик) и `vm-backup.zip` (импортируется в Violentmonkey).
+  ```bash
+  uv run browser-toolkit ext backup
+  ```
+- **`ext serve [--port 8080]`**:  
+  Локальный хаб и веб-сервер с Gruvbox-дашбордом. Отображает все локальные стили и скрипты с кнопками **1-Click Install**, которые Stylus и Violentmonkey нативно перехватывают при клике в Zen Browser.
+  ```bash
+  uv run browser-toolkit ext serve --port 8080
+  ```
+
+---
+
 ## Установка
 
 ```bash

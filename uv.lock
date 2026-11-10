@@ -7,11 +7,28 @@ name = "browser-toolkit"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "dfindexeddb" },
     { name = "playwright" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "playwright", specifier = ">=1.40.0" }]
+requires-dist = [
+    { name = "dfindexeddb", specifier = ">=20260210" },
+    { name = "playwright", specifier = ">=1.40.0" },
+]
+
+[[package]]
+name = "dfindexeddb"
+version = "20260210"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-snappy" },
+    { name = "zstd" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/45/9f/5010f380e5300083628321935737a6cb34c7a943bd65d1ab64efcdb0452e/dfindexeddb-20260210.tar.gz", hash = "sha256:e1a8447b82e9a21d28a8647a908ec9d471067ef295133bb7a90fb7ca480577f6", size = 69327, upload-time = "2026-02-10T09:19:22.58Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/10/2912124299c87e7184bcee47f3895d23d11571b877e3dface338f510bb8b/dfindexeddb-20260210-py3-none-any.whl", hash = "sha256:c037eb764b8bc437e2052d9d54952de1ef97aec4c81d5676b490a2901fdf4290", size = 91178, upload-time = "2026-02-10T09:19:21.039Z" },
+]
 
 [[package]]
 name = "greenlet"
@@ -107,4 +124,28 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fe/21/af53bd727a8dfb7289c9f5c9477f84aa3dd8d9e7786ed68b65c9e2625ec3/playwright-1.65.0-py3-none-win32.whl", hash = "sha256:d9efef7b809020325d3d1bb34eb05c93865199274319249c9f6a77cd17fd8573", size = 42664070, upload-time = "2026-11-09T21:09:50.532Z" },
     { url = "https://files.pythonhosted.org/packages/8c/0d/32e96514b48fabd16ece31bae11afba5e18cf425123fb7c36c6b8bd8db8f/playwright-1.65.0-py3-none-win_amd64.whl", hash = "sha256:ab22611318e8747477c949c81b055ee6e224ecedf66c2a794209c7fd0210a743", size = 42664080, upload-time = "2026-11-09T21:09:54.425Z" },
     { url = "https://files.pythonhosted.org/packages/ac/d6/2a75d6eeda7b23e1b241ef898ed53bc3ea134ff52d2c959c770dce843e3c/playwright-1.65.0-py3-none-win_arm64.whl", hash = "sha256:67f0b1a80d0d2d4349f67c1ccfeceaa067f1d85aaac32d4d81dd3e971a96ddbb", size = 38367903, upload-time = "2026-11-09T21:09:58.28Z" },
+]
+
+[[package]]
+name = "python-snappy"
+version = "0.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/7a/44a24bad98335b2c72e4cadcdecf79f50197d1bab9f22f863a274f104b96/python-snappy-0.6.1.tar.gz", hash = "sha256:b6a107ab06206acc5359d4c5632bd9b22d448702a79b3169b0c62e0fb808bb2a", size = 24110, upload-time = "2022-02-22T15:54:07.129Z" }
+
+[[package]]
+name = "zstd"
+version = "1.5.5.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/b4/bf8c6a6b73c6b267a13df955f821f041fcc770b56820b135849f33e3b888/zstd-1.5.5.1.tar.gz", hash = "sha256:1ef980abf0e1e072b028d2d76ef95b476632651c96225cf30b619c6eef625672", size = 1106585, upload-time = "2023-04-05T23:32:37.801Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/6f/5b8a828394af6153ec08fd4814c9a4bbae9ec5bce3cb948bb0b9b6872022/zstd-1.5.5.1-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:022f935a8666e08f0fff6204938a84d9fe4fcd8235a205787275933a07a164fb", size = 287614, upload-time = "2023-04-05T23:41:30.018Z" },
+    { url = "https://files.pythonhosted.org/packages/99/33/a51e2e4e469af134d5a8450d59da05c34017eea9bb16d1d1ed7b83b5ed98/zstd-1.5.5.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:a3d15a2d18dac8bcafdde52fdf5d40ecae1f73b7de19b171f42339d2e51346d0", size = 227505, upload-time = "2023-04-05T23:41:27.94Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/1a/ec11fdf56b282ca627c979b5b0c9c2ef14b416c0b2ad4264972c6765b634/zstd-1.5.5.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:45b9c67989f50ba63ffa0c50c9eaa037c2d14abacb0813e838ad705135245b4b", size = 1758942, upload-time = "2023-04-06T00:04:48.501Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/2a/65d09266af0c0a9b077148a6b596c8727de16ef174a6a840a88bc42f8956/zstd-1.5.5.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:97da6a842ba7e4acf8bba7c596057143ee39b3c4a467196c2096d460e44accd6", size = 1784548, upload-time = "2023-04-06T00:04:55.445Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/d4/7621dffe3a34a948dfa7ba40e77657526f967e3dd086608ab083fc8dd0d4/zstd-1.5.5.1-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:2dafd492fb8ee4ae04c81ab00f5f137860e7071f611335dd4cdb1c38bd8f11bc", size = 1638061, upload-time = "2023-04-06T00:04:45.8Z" },
+    { url = "https://files.pythonhosted.org/packages/28/0e/a3668ca3147434fd336f66d3f28553e228a73ea6b736f0ad2e9920b7de85/zstd-1.5.5.1-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:9ee83e0bcbfd776200b026b3b9e86c6c86b8f414749f58d87c85dcf456b27066", size = 1893027, upload-time = "2023-04-06T00:04:51.201Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/3f/0a00f50d1d30293f896a36afbd83de65efd59c023693ea95f27071508d40/zstd-1.5.5.1-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:ae2fd4bc8ea772a7b5f1acd1cac9e34bb9cd8fcde191f170092fdeea779a3a12", size = 1825873, upload-time = "2023-04-06T00:04:40.498Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/2f/3d346dcf2c525f1c3e4b0efebf653cc1da69f287bc4084391fb3a449f691/zstd-1.5.5.1-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:edea52a0109f48fd46f4763689d3d356dcafd20ddf6789c559a1bd2e62b40a32", size = 1930928, upload-time = "2023-04-06T00:04:43.229Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/f3/c7d49044609ad59bf4e09cf182215474b229128514885f1f0db82386c5a8/zstd-1.5.5.1-cp311-cp311-win32.whl", hash = "sha256:88410481209520298ec4430e0d1d57e004c45e0b27c3035674fb182ccd2d8b7b", size = 150758, upload-time = "2023-04-05T23:43:31.133Z" },
+    { url = "https://files.pythonhosted.org/packages/af/39/6314d344793ca78556832b281c4a4916362bfca0943ced3eff25221b5385/zstd-1.5.5.1-cp311-cp311-win_amd64.whl", hash = "sha256:dce18aaefbacf8b133367be86beec670baf68c0420bfcca49be08dbdbf933db6", size = 167971, upload-time = "2023-04-05T23:43:33.238Z" },
 ]

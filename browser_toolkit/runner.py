@@ -25,6 +25,8 @@ from .responsive_checker import ResponsiveChecker
 from .theme_flaw_checker import ThemeFlawChecker
 from .gm_shim import GM_FULL_SHIM_JS
 from .mutation_tracker import attach_mutation_tracker, collect_dom_mutations
+from .extension_manager import ExtensionManager
+from .sync_server import run_sync_server
 
 
 class AuditorRunner:
@@ -1017,4 +1019,85 @@ class AuditorRunner:
             headless=not headful,
             screenshot_on_change=screenshot,
             output_screenshot=output_screenshot,
+        )
+
+    def get_extension_manager(self) -> ExtensionManager:
+        return ExtensionManager(self.profile_path)
+
+    def ext_status(self) -> Dict[str, Any]:
+        mgr = self.get_extension_manager()
+        styles = mgr.list_styles()
+        scripts = mgr.list_scripts()
+        return {
+            "profile_dir": str(mgr.profile_dir),
+            "stylus_db": str(mgr.get_stylus_db_path() or "Not found"),
+            "violentmonkey_db": str(mgr.get_violentmonkey_db_path() or "Not found"),
+            "stylus_installed_count": len(styles),
+            "violentmonkey_installed_count": len(scripts),
+            "active_styles_count": sum(1 for s in styles if s.enabled),
+            "active_scripts_count": sum(1 for sc in scripts if sc.enabled),
+        }
+
+    def ext_list_styles(self) -> List[Dict[str, Any]]:
+        mgr = self.get_extension_manager()
+        return [
+            {
+                "id": s.id,
+                "name": s.name,
+                "enabled": s.enabled,
+                "sections_count": len(s.sections),
+                "domains": [d for sec in s.sections for d in sec.domains],
+            }
+            for s in mgr.list_styles()
+        ]
+
+    def ext_list_scripts(self) -> List[Dict[str, Any]]:
+        mgr = self.get_extension_manager()
+        return [
+            {
+                "id": sc.id,
+                "name": sc.name,
+                "version": sc.version,
+                "enabled": sc.enabled,
+                "matches": sc.matches,
+                "code_size": len(sc.code),
+            }
+            for sc in mgr.list_scripts()
+        ]
+
+    def ext_export_styles(self, output_dir: str | Path) -> int:
+        mgr = self.get_extension_manager()
+        return mgr.export_styles(output_dir)
+
+    def ext_export_scripts(self, output_dir: str | Path) -> int:
+        mgr = self.get_extension_manager()
+        return mgr.export_scripts(output_dir)
+
+    def ext_diff_styles(self, local_dir: str | Path) -> Dict[str, Any]:
+        mgr = self.get_extension_manager()
+        return mgr.diff_styles(local_dir)
+
+    def ext_diff_scripts(self, local_dir: str | Path) -> Dict[str, Any]:
+        mgr = self.get_extension_manager()
+        return mgr.diff_scripts(local_dir)
+
+    def ext_build_stylus_backup(self, styles_dir: str | Path, output_file: str | Path) -> int:
+        mgr = self.get_extension_manager()
+        return mgr.build_stylus_backup_json(styles_dir, output_file)
+
+    def ext_build_vm_backup(self, scripts_dir: str | Path, output_file: str | Path) -> int:
+        mgr = self.get_extension_manager()
+        return mgr.build_violentmonkey_backup_zip(scripts_dir, output_file)
+
+    def ext_serve(
+        self,
+        port: int = 8080,
+        styles_dir: Optional[str | Path] = None,
+        scripts_dir: Optional[str | Path] = None,
+    ) -> None:
+        run_sync_server(
+            port=port,
+            styles_dir=styles_dir,
+            scripts_dir=scripts_dir,
+            profile_path=self.profile_path,
         )

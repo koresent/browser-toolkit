@@ -44,6 +44,10 @@ class UserStyleInfo:
 
         return "https://example.com"
 
+    def get_all_css(self) -> str:
+        """Returns all CSS across all sections combined."""
+        return "\n".join(s.css_content for s in self.sections)
+
     def get_combined_css_for_url(self, target_url: str) -> str:
         """Returns all CSS rules that apply to the given URL."""
         parsed = urlparse(target_url)
