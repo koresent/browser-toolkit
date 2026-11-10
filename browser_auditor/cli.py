@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from .profile import find_zen_profile
 from .runner import AuditorRunner
+from .scanner import scan_directory
 
 
 def print_style_summary(report: Dict[str, Any]) -> None:
@@ -79,6 +80,60 @@ def print_script_summary(report: Dict[str, Any]) -> None:
     print("=" * 60 + "\n")
 
 
+def print_search_results(data: Dict[str, Any]) -> None:
+    matches = data.get("matches", [])
+    print("\n" + "=" * 60)
+    print(f"🔍 DOM Search on {data.get('url')}")
+    print(f"Matched Elements: {len(matches)}")
+    print("-" * 60)
+
+    for idx, m in enumerate(matches):
+        print(f"\n#{idx + 1} <{m['tagName']}> | Visible: {'✅' if m.get('visible') else '❌'} | Dimensions: {m.get('rect', {}).get('width')}x{m.get('rect', {}).get('height')}px")
+        if m.get("textSnippet"):
+            print(f"   Text: \"{m['textSnippet']}\"")
+        if m.get("className"):
+            print(f"   Class: {m['className']}")
+        if m.get("ariaLabel"):
+            print(f"   aria-label: {m['ariaLabel']}")
+
+        selectors = m.get("selectors", [])
+        if selectors:
+            print("   💡 Suggested Stable Selectors:")
+            for s in selectors[:3]:
+                unique_badge = "★ Unique (1 element)" if s.get("count") == 1 else f"({s.get('count')} elements)"
+                print(f"      • {s['selector']}  [{unique_badge}]")
+
+    print("\n" + "=" * 60 + "\n")
+
+
+def print_scan_summary(data: Dict[str, Any]) -> None:
+    total = data.get("total_scanned", 0)
+    broken = data.get("broken_count", 0)
+    healthy = total - broken
+
+    print("\n" + "=" * 70)
+    print(f"📂 Batch Scan Report: {data.get('root_dir')}")
+    print(f"Total Files: {total} | ✅ Healthy: {healthy} | ❌ Broken / Errors: {broken}")
+    print("-" * 70)
+
+    for r in data.get("results", []):
+        st = r.get("status")
+        badge = "✅ OK" if st == "OK" else "❌ BROKEN"
+        name = r.get("name")
+        rel_file = r.get("file")
+        if r.get("type") == "userstyle":
+            details = f"{r.get('matched', 0)}/{r.get('total_selectors', 0)} matched"
+            if st != "OK" and r.get("dead_selectors"):
+                details += f" (Dead: {', '.join(r['dead_selectors'][:2])})"
+        else:
+            errs = r.get("errors", [])
+            details = f"{len(errs)} errors" if errs else "Executed cleanly"
+
+        print(f" {badge:<10} | {rel_file:<35} | {details}")
+
+    print("=" * 70 + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="browser-auditor",
@@ -96,13 +151,66 @@ def main() -> None:
     audit_parser.add_argument("--output", help="Directory to save screenshots and report")
     audit_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
+    # Command: scan
+    scan_parser = subparsers.add_parser("scan", help="Batch scan directory of styles/scripts")
+    scan_parser.add_argument("dir", help="Directory path to scan")
+    scan_parser.add_argument("--only-broken", action="store_true", help="Only report broken files")
+    scan_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    scan_parser.add_argument("--profile", help="Path to custom profile")
+    scan_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    scan_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: search
+    search_parser = subparsers.add_parser("search", help="Search DOM by text/keyword and synthesize selectors")
+    search_parser.add_argument("url", help="Target URL")
+    search_parser.add_argument("--text", help="Search by visible text")
+    search_parser.add_argument("--keyword", help="Search keyword in class, id, aria attributes")
+    search_parser.add_argument("--role", help="Search by ARIA role")
+    search_parser.add_argument("--tag", help="Filter by HTML tag")
+    search_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    search_parser.add_argument("--profile", help="Path to custom profile")
+    search_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    search_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: test-rule
+    rule_parser = subparsers.add_parser("test-rule", help="Test candidate CSS rule on live page with impact analysis")
+    rule_parser.add_argument("url", help="Target URL")
+    rule_parser.add_argument("--css", required=True, help="CSS rule to test, e.g. '.foo { display: none; }'")
+    rule_parser.add_argument("--output", help="Output directory for before/after screenshots")
+    rule_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    rule_parser.add_argument("--profile", help="Path to custom profile")
+    rule_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    rule_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: screenshot
+    shot_parser = subparsers.add_parser("screenshot", help="Capture page or element screenshot with hover/wait")
+    shot_parser.add_argument("url", help="Target URL")
+    shot_parser.add_argument("--output", default="screenshot.png", help="Output image file path")
+    shot_parser.add_argument("--selector", help="Capture only this element")
+    shot_parser.add_argument("--hover", help="Hover over selector before screenshot")
+    shot_parser.add_argument("--wait", help="Wait for selector before screenshot")
+    shot_parser.add_argument("--full-page", action="store_true", help="Capture full page height")
+    shot_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    shot_parser.add_argument("--profile", help="Path to custom profile")
+    shot_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    shot_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
+    # Command: interact
+    interact_parser = subparsers.add_parser("interact", help="Perform sequence of user actions (click, hover, fill)")
+    interact_parser.add_argument("url", help="Target URL")
+    interact_parser.add_argument("--actions", required=True, help="JSON string or file path containing list of actions")
+    interact_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    interact_parser.add_argument("--profile", help="Path to custom profile")
+    interact_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    interact_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
     # Command: inspect
     inspect_parser = subparsers.add_parser("inspect", help="Inspect a selector on a live URL")
     inspect_parser.add_argument("url", help="Target URL to open")
     inspect_parser.add_argument("--selector", required=True, help="CSS selector to inspect")
     inspect_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    inspect_parser.add_argument("--profile", help="Path to custom profile directory")
-    inspect_parser.add_argument("--headful", action="store_true", help="Run with visible browser window")
+    inspect_parser.add_argument("--profile", help="Path to custom profile")
+    inspect_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     inspect_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # Command: profile-info
@@ -148,6 +256,85 @@ def main() -> None:
         else:
             sys.stderr.write(f"Error: Unknown file type. Must be .user.css or .user.js: {target_path}\n")
             sys.exit(1)
+
+    elif args.command == "scan":
+        data = scan_directory(
+            root_dir=args.dir,
+            profile_path=getattr(args, "profile", None),
+            use_profile=not getattr(args, "no_profile", False),
+            only_broken=getattr(args, "only_broken", False),
+            headless=not getattr(args, "headful", False),
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print_scan_summary(data)
+
+    elif args.command == "search":
+        data = runner.search(
+            url=args.url,
+            text=args.text,
+            keyword=args.keyword,
+            role=args.role,
+            tag=args.tag,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print_search_results(data)
+
+    elif args.command == "test-rule":
+        data = runner.test_rule(
+            url=args.url,
+            css_rule=args.css,
+            output_dir=args.output,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            impact = data.get("impact", {})
+            matched = impact.get("matched", [])
+            print("\n" + "=" * 60)
+            print(f"🧪 Rule Impact Test on {args.url}")
+            print(f"CSS: {args.css}")
+            print(f"Matched elements: {len(matched)}")
+            print(f"High-impact (>25% viewport) elements: {impact.get('highImpactCount', 0)}")
+            print(f"Screenshots saved to: {data.get('screenshot_before')} and {data.get('screenshot_after')}")
+            print("-" * 60)
+            for m in matched[:5]:
+                print(f" • <{m['tagName']}> | {m['dimensions']['width']}x{m['dimensions']['height']}px ({m['viewportRatioPercent']}% viewport) | Text: \"{m['textSnippet']}\"")
+            print("=" * 60 + "\n")
+
+    elif args.command == "screenshot":
+        data = runner.screenshot(
+            url=args.url,
+            output_path=args.output,
+            selector=args.selector,
+            hover_selector=args.hover,
+            wait_selector=args.wait,
+            full_page=args.full_page,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print(f"\n📸 Screenshot captured and saved to: {data.get('saved_to')}\n")
+
+    elif args.command == "interact":
+        raw_actions = args.actions
+        if Path(raw_actions).exists():
+            with open(raw_actions, "r", encoding="utf-8") as f:
+                actions_list = json.load(f)
+        else:
+            actions_list = json.loads(raw_actions)
+
+        data = runner.interact(url=args.url, actions=actions_list)
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print(f"\n⚡ Action Sequence executed on {args.url}:")
+            for res in data.get("action_results", []):
+                print(f" Step #{res['step']}: {res['action']} -> {res['status']} {res.get('saved_to', '')}")
+            print()
 
     elif args.command == "inspect":
         data = runner.inspect_element(args.url, args.selector)

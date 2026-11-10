@@ -1,8 +1,10 @@
 # browser-auditor
 
-Инструмент автоматизированного тестирования, аудита и отладки **UserStyles** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
+Комплексный инструмент автоматизированного тестирования, аудита и отладки **UserStyles** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
 
-## Основные возможности
+---
+
+## Возможности
 
 1. **Безопасная работа с профилем Zen:**
    - Автоматически находит ваш рабочий профиль Zen (`~/.config/zen/profiles.ini`).
@@ -10,29 +12,30 @@
    - Очищает блокировки (`lock`, `.parentlock`) и сессионные вкладки, исключая конфликты с запущенным Zen.
    - Гарантированно удаляет временную копию профиля по завершении работы.
 
-2. **Аудит пользовательских стилей (UserStyles):**
-   - Парсит метаданные (`==UserStyle==`) и блоки `@-moz-document` (domain, regexp, url, url-prefix).
-   - Инжектит стили в DOM и тестирует каждый CSS-селектор на живой странице.
-   - Находит «мертвые» селекторы (0 совпадений из-за изменений в верстке сайта) и предлагает кандидатов из DOM на замену.
-   - Делает скриншоты страницы «ДО» и «ПОСЛЕ» применения стиля.
+2. **Пакетный аудит каталогов (`scan`):**
+   - Сканирует целые каталоги стилей и скриптов в одном сеансе.
+   - Выводит наглядную сводку здоровья стилей (`--only-broken` для фильтрации только проблемных).
 
-3. **Аудит пользовательских скриптов (UserScripts):**
-   - Парсит метаданные (`==UserScript==`), `@match`, `@include`, `@run-at`, `@grant`.
-   - Внедряет полифиллы для Greasemonkey/Tampermonkey API (`GM_getValue`, `GM_setValue`, `GM_xmlhttpRequest`, `GM_registerMenuCommand` и т.д.).
-   - Перехватывает логи консоли, ошибки выполнения и незарегистрированные исключения.
-   - Сохраняет скриншот страницы после отработки скрипта.
+3. **Интеллектуальный поиск по DOM и генератор устойчивых селекторов (`search`):**
+   - Поиск элементов по тексту, ключевым словам в классах/ID/aria-атрибутах, ролям или тегам.
+   - Автоматический синтез устойчивых CSS-селекторов (приоритет `data-testid`, `aria-*`, семантические селекторы вместо нестабильных хэшей CSS Modules).
 
-4. **Инспекция селекторов:**
-   - Быстрый просмотр элементов на целевом URL через сессию Zen с выводом классов, атрибутов, вычисленных стилей (`computedStyle`) и HTML-сниппетов.
+4. **Тестирование гипотез на лету (`test-rule`):**
+   - Примерка CSS-правила на живой странице до изменения файла.
+   - Оценка влияния (Impact Analysis): процент площади экрана, количество скрываемых элементов, предотвращение случайного скрытия контента страницы.
+   - Автоматические скриншоты «ДО» и «ПОСЛЕ».
 
-5. **Режим для ИИ-агентов (`--json`):**
-   - Вывод результатов в структурированном JSON для автоматизированного анализа и исправления кода стилей/скриптов.
+5. **Интерактивные действия и скриншоты (`screenshot`, `interact`):**
+   - Скриншоты отдельных элементов (`--selector`), всей страницы (`--full-page`) или с наведением мыши (`--hover` для проверки меню и `:hover` состояний).
+   - Выполнение цепочки действий пользователя (`click`, `hover`, `fill`, `press`, `wait`, `screenshot`) для тестирования модальных окон, дропдаунов и вкладок.
+
+6. **Аудит пользовательских скриптов (UserScripts):**
+   - Внедрение полифиллов Greasemonkey/Tampermonkey API (`GM_getValue`, `GM_setValue`, `GM_xmlhttpRequest`, `GM_registerMenuCommand` и т.д.).
+   - Перехват ошибок выполнения и логов консоли.
 
 ---
 
 ## Установка
-
-Требуются: Python 3.11+, `uv` (или `pip`).
 
 ```bash
 cd /home/koresent/Projects/personal/browser-auditor
@@ -42,32 +45,61 @@ uv pip install -e .
 
 ---
 
-## Использование
+## Справочник команд
 
-### 1. Проверка пользовательского стиля (.user.css)
+### 1. Пакетное сканирование (`scan`)
 ```bash
-# Автоматически определит URL из @-moz-document
-uv run browser-auditor audit /path/to/style.user.css
+# Проверить здоровье всех стилей в папке habr:
+uv run browser-auditor scan /home/koresent/Projects/personal/userstyles/habr
 
-# С переопределением целевого URL:
-uv run browser-auditor audit /path/to/style.user.css --url https://github.com/koresent/userstyles
-
-# В формате JSON (для агентов и скриптов):
-uv run browser-auditor audit /path/to/style.user.css --json
+# Вывести только сломанные файлы:
+uv run browser-auditor scan /home/koresent/Projects/personal/userstyles/ --only-broken
 ```
 
-### 2. Проверка пользовательского скрипта (.user.js)
+### 2. Аудит одного стиля или скрипта (`audit`)
 ```bash
+# Аудит UserStyle:
+uv run browser-auditor audit /path/to/style.user.css
+
+# Аудит UserScript:
 uv run browser-auditor audit /path/to/script.user.js
 ```
 
-### 3. Инспекция конкретного селектора на странице
+### 3. Поиск элементов и синтез селекторов (`search`)
 ```bash
-uv run browser-auditor inspect https://github.com/koresent --selector "div[class*='Copilot']"
+# Найти все элементы, связанные с Copilot на GitHub:
+uv run browser-auditor search https://github.com --keyword "copilot"
+
+# Найти кнопку по тексту:
+uv run browser-auditor search https://github.com --text "Sign out" --role button
 ```
 
-### 4. Дополнительные флаги
-- `--no-profile` — запустить изолированный чистый профиль без использования профиля Zen.
-- `--headful` — запустить браузер в графическом режиме с видимым окном.
-- `--output <dir>` — директория для сохранения скриншотов и отчетов (по умолчанию `./audit-results/<name>/`).
-- `--profile <path>` — путь к конкретному профилю.
+### 4. Проверка правила на лету (`test-rule`)
+```bash
+uv run browser-auditor test-rule https://github.com --css 'button[aria-label="Open Copilot…"] { display: none !important; }'
+```
+
+### 5. Скриншоты элементов и интерактивных состояний (`screenshot`)
+```bash
+# Скриншот только шапки сайта:
+uv run browser-auditor screenshot https://github.com --selector "header" --output /tmp/header.png
+
+# Скриншот выпадающего меню после наведения:
+uv run browser-auditor screenshot https://github.com --hover "#user-menu" --output /tmp/menu.png
+```
+
+### 6. Цепочка интерактивных действий (`interact`)
+```bash
+uv run browser-auditor interact https://github.com --actions '[
+  {"action": "click", "selector": "button[aria-label=\\"Open Copilot…\\"]"},
+  {"action": "wait", "ms": 1000},
+  {"action": "screenshot", "path": "/tmp/copilot_opened.png"}
+]'
+```
+
+### 7. Инспекция селектора (`inspect`)
+```bash
+uv run browser-auditor inspect https://github.com --selector "header"
+```
+
+Все команды поддерживают флаг `--json` для программной интеграции с агентами.

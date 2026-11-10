@@ -2,13 +2,17 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from playwright.sync_api import sync_playwright
 
 from .profile import ZenProfileContext
 from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page, CSSAuditResult
 from .js_auditor import inject_userscript, setup_js_listeners, JSAuditResult, GM_SHIM_JS
+from .search import search_dom
+from .interaction import PageInteractor, execute_action_sequence
+from .test_rule import test_rule_impact
+from .scanner import scan_directory
 
 
 class AuditorRunner:
@@ -232,5 +236,132 @@ class AuditorRunner:
                         selector,
                     )
                     return {"url": url, "selector": selector, "result": data}
+                finally:
+                    context.close()
+
+    def search(
+        self,
+        url: str,
+        text: Optional[str] = None,
+        keyword: Optional[str] = None,
+        role: Optional[str] = None,
+        tag: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(2000)
+                    results = search_dom(page, text=text, keyword=keyword, role=role, tag=tag)
+                    return {"url": url, "matches_count": len(results), "matches": results}
+                finally:
+                    context.close()
+
+    def screenshot(
+        self,
+        url: str,
+        output_path: str | Path,
+        selector: Optional[str] = None,
+        hover_selector: Optional[str] = None,
+        wait_selector: Optional[str] = None,
+        full_page: bool = False,
+    ) -> Dict[str, Any]:
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(1500)
+
+                    interactor = PageInteractor(page)
+                    if wait_selector:
+                        interactor.wait_for(wait_selector)
+                    if hover_selector:
+                        interactor.hover(hover_selector)
+                        page.wait_for_timeout(500)
+
+                    saved = interactor.capture_screenshot(output_path, selector=selector, full_page=full_page)
+                    return {"url": url, "saved_to": str(saved)}
+                finally:
+                    context.close()
+
+    def test_rule(
+        self,
+        url: str,
+        css_rule: str,
+        output_dir: Optional[str | Path] = None,
+    ) -> Dict[str, Any]:
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(2000)
+                    return test_rule_impact(page, css_rule, output_dir=output_dir)
+                finally:
+                    context.close()
+
+    def interact(
+        self,
+        url: str,
+        actions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(2000)
+                    results = execute_action_sequence(page, actions)
+                    return {"url": url, "action_results": results}
                 finally:
                     context.close()
