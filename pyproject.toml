@@ -1,0 +1,16 @@
+[project]
+name = "browser-auditor"
+version = "0.1.0"
+description = "Auditing, testing, and fixing tool for UserStyles and UserScripts using Zen Browser profile"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.40.0",
+]
+
+[project.scripts]
+browser-auditor = "browser_auditor.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
