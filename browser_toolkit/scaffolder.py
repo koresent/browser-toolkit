@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from .palettes import format_gruvbox_css
+from .modernizer import MODERN_CSS_ENHANCEMENT
 
 
 def format_selector_group(items: List[Dict[str, Any]], indent: str = "    ") -> str:
@@ -23,6 +24,7 @@ def scaffold_gruvbox_theme(
     variant: str = "dark",
     roles_data: Optional[Dict[str, Any]] = None,
     palette_data: Optional[Dict[str, Any]] = None,
+    modernize: bool = True,
     output_path: Optional[str | Path] = None,
 ) -> str:
     parsed = urlparse(url)
@@ -200,6 +202,9 @@ def scaffold_gruvbox_theme(
             "        filter: sepia(1) !important;",
             "    }",
         ])
+
+    if modernize:
+        lines.append(MODERN_CSS_ENHANCEMENT)
 
     lines.extend(["}", ""])
     content = "\n".join(lines)

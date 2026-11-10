@@ -20,6 +20,8 @@ from .role_mapper import map_site_roles
 from .scaffolder import scaffold_gruvbox_theme
 from .contrast_checker import check_page_contrast
 from .preview import run_live_preview
+from .css_color_extractor import extract_colors_from_file_or_url
+from .modernizer import audit_modernity
 
 
 class AuditorRunner:
@@ -573,6 +575,7 @@ class AuditorRunner:
         url: str,
         name: Optional[str] = None,
         variant: str = "dark",
+        modernize: bool = True,
         output_path: Optional[str | Path] = None,
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
@@ -599,6 +602,7 @@ class AuditorRunner:
                         variant=variant,
                         roles_data=roles_data,
                         palette_data=palette_data,
+                        modernize=modernize,
                         output_path=output_path,
                     )
                     return {
@@ -609,6 +613,35 @@ class AuditorRunner:
                         "content_length": len(content),
                         "content": content,
                     }
+                finally:
+                    context.close()
+
+    def extract_css_colors(self, target: str, output_path: Optional[str | Path] = None) -> str:
+        return extract_colors_from_file_or_url(
+            target=target,
+            output_path=output_path,
+            profile_path=self.profile_path,
+            use_profile=self.use_profile,
+        )
+
+    def audit_site_modernity(self, url: str) -> Dict[str, Any]:
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    return audit_modernity(page, url)
                 finally:
                     context.close()
 

@@ -1,64 +1,77 @@
 # browser-toolkit
 
-Комплексный инструментарий автоматизированного тестирования, аудита и **создания Gruvbox-тем** (`.user.css`) и **UserScripts** (`.user.js`) на движке **Gecko** с поддержкой профиля браузера **Zen**.
+Комплексный инструментарий автоматизированного тестирования, аудита, **создания Gruvbox-тем** (`.user.css`) и **модернизации устаревшей верстки сайтов под стандарты 2026 года** с поддержкой профиля браузера **Zen**.
 
 ---
 
-## 🛠️ Инструменты для создания новых Gruvbox-тем
+## 🎨 Создание новых тем Gruvbox и редизайн под 2026 год
 
-Инструментарий полностью заточен под создание фирменных тем **Gruvbox** (Dark, Dark-Hard, Dark-Soft, Light) в точном соответствии со стилем каталога:
+### 1. Извлечение скелета хардкодных цветов (`extract-colors`)
+*Адаптированная и улучшенная версия `Extract-ThemeColors-Universal.ps1` на Python:*
+- Принимает **локальный `.css` файл** ИЛИ **URL живого сайта** (автоматически выгружает все подключенные таблицы стилей).
+- Отсекает вызовы `var(...)` (как вторичные использования), отбрасывает отступы, сетки и анимации.
+- Сохраняет только селекторы с явными хардкодными цветами (HEX, RGB, HSL, named colors) и свойствами фона/рамок/текста:
+```bash
+# Для локального файла:
+uv run browser-toolkit extract-colors /path/to/stylesheet.css --output colors.css
 
-### 1. Реверс-инжиниринг цветов сайта (`extract-palette`)
-Сканирует целевой сайт на наличие нативных CSS-переменных (`--color-...`, `--bg-...`) и кластеризует реальные цвета поверхностей, текста и рамок:
+# Напрямую для живого сайта:
+uv run browser-toolkit extract-colors https://vikunja.io --output vikunja-colors.css
+```
+
+### 2. Аудит устаревшей верстки и эргономики (`audit-layout`)
+Находит пережитки верстки 90-х и 2000-х годов:
+- Устаревшие шрифты (`Times New Roman`, `Verdana`, `Courier`).
+- Сжатый текст (`font-size < 14px` или `line-height < 1.35`).
+- Непомерная ширина строк (текстовые блоки шире 950px, утомляющие глаза на 2K/4K).
+- Фиксированные неадаптивные контейнеры (`width: 1000px`).
+- Табличную верстку:
+```bash
+uv run browser-toolkit audit-layout https://www.opennet.ru
+```
+
+### 3. Автогенерация современной Gruvbox-темы (`scaffold`)
+Создает заготовку `.user.css` с переменными Gruvbox, переопределением нативных переменных сайта и **блоком современных улучшений 2026 года**:
+- Сглаженная системная типографика (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif`).
+- Оптимальная ширина чтения (`max-width: 80ch !important`).
+- Тонкие аккуратные скроллбары (`scrollbar-width: thin`).
+- Современные скругленные контролы форм с кольцами фокуса доступности (`outline: 2px solid var(--accent)`).
+- Моноширинный стек для кода (`JetBrains Mono`, `Fira Code`).
+```bash
+# Сгенерировать современную Gruvbox тему:
+uv run browser-toolkit scaffold https://opennet.ru --name OpenNet --output opennet/gruvbox.user.css
+
+# Без инъекции современных улучшений (только цвета):
+uv run browser-toolkit scaffold https://opennet.ru --no-modernize
+```
+
+### 4. Реверс-инжиниринг цветов и переменных (`extract-palette`)
 ```bash
 uv run browser-toolkit extract-palette https://habr.com
 ```
 
-### 2. Семантическое картирование ролей DOM (`map-roles`)
-Автоматически группирует селекторы страницы по их функциональным ролям:
-- **Базовые поверхности:** холст, тело сайта, основные контейнеры (`var(--bg0)`).
-- **Приподнятые поверхности:** шапки, меню, сайдбары (`var(--bg-dark)`).
-- **Всплывающие элементы:** карточки, модалки, дропдауны (`var(--bg1)` / `var(--bg2)`).
-- **Типографика:** заголовки (`var(--fg0)`), основной текст (`var(--fg1)`), мета/даты (`var(--fg-muted)`), ссылки (`var(--blue)` / hover `var(--yellow)`).
-- **Формы:** инпуты, кнопки, чекбоксы (`var(--bg1)`, `var(--bg3)`).
-- **Код и иконки:** блоки `pre`/`code`, SVG-фильтры (`filter: sepia(1)`).
-
+### 5. Семантическая разметка ролей DOM (`map-roles`)
 ```bash
 uv run browser-toolkit map-roles https://habr.com
 ```
 
-### 3. Автоматическая генерация заготовки темы (`scaffold`)
-Создает полностью структурированный файл `.user.css` с метаданными UserStyle, переменными Gruvbox и готовыми блоками селекторов под целевой сайт:
-```bash
-# Сгенерировать тему Gruvbox Dark и сохранить в файл:
-uv run browser-toolkit scaffold https://habr.com --name Habr --output habr/gruvbox.user.css
-
-# С вариантом Gruvbox Dark Hard:
-uv run browser-toolkit scaffold https://habr.com --variant dark-hard --output habr/gruvbox.user.css
-```
-
-### 4. Аудит контрастности по WCAG 2.1 (`check-contrast`)
-Проверяет читаемость текста при наложении темы. Рассчитывает относительную яркость и контраст для каждого видимого текста, отслеживая проблемные места (порог 4.5:1 для обычного текста, 3:1 для крупного):
+### 6. Проверка контрастности по WCAG 2.1 (`check-contrast`)
 ```bash
 uv run browser-toolkit check-contrast https://qna.habr.com --css path/to/gruvbox.user.css
 ```
 
-### 5. Живой предпросмотр с Hot-Reload (`preview`)
-Запускает браузер и отслеживает изменения в файле темы. При сохранении файла стили в браузере обновляются на лету за < 50мс без перезагрузки страницы и без потери фокуса:
+### 7. Живой предпросмотр с Hot-Reload (`preview`)
+Мгновенное обновление CSS в открытом Zen Browser без перезагрузки вкладки при каждом сохранении файла:
 ```bash
-# В видимом окне Zen Browser:
-uv run browser-toolkit preview https://habr.com habr/gruvbox.user.css
-
-# В фоне со скриншотом при каждом сохранении:
-uv run browser-toolkit preview https://habr.com habr/gruvbox.user.css --headless
+uv run browser-toolkit preview https://habr.com /path/to/gruvbox.user.css
 ```
 
 ---
 
-## 🔍 Инструменты аудита и багфикса
+## 🔍 Аудит, поиск и пакетное тестирование
 
 ### 1. Картографирование макетов сайта (`map-site`)
-Использует DOM Structural Fingerprinting (сходство Жаккара) для поиска уникальных типов страниц и отсечения повторяющихся однотипных постов:
+DOM Structural Fingerprinting (сходство Жаккара): отличает уникальные типы страниц и отсекает повторяющиеся однотипные посты:
 ```bash
 uv run browser-toolkit map-site https://qna.habr.com --css path/to/gruvbox.user.css --max-archetypes 5
 ```
@@ -70,11 +83,10 @@ uv run browser-toolkit scan /path/to/userstyles/ --only-broken
 
 ### 3. Аудит одного стиля или скрипта (`audit`)
 ```bash
-# С глубокой охотой по уникальным архетипам до победного:
 uv run browser-toolkit audit path/to/gruvbox.user.css --deep-hunt
 ```
 
-### 4. Поиск элементов и синтез селекторов (`search`)
+### 4. Поиск элементов и генерация устойчивых селекторов (`search`)
 ```bash
 uv run browser-toolkit search https://github.com --keyword "copilot"
 ```

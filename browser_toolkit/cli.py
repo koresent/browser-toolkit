@@ -258,6 +258,7 @@ def main() -> None:
     scaffold_parser.add_argument("url", help="Target URL")
     scaffold_parser.add_argument("--name", help="Theme name (e.g. Wikipedia)")
     scaffold_parser.add_argument("--variant", default="dark", choices=["dark", "dark-hard", "dark-soft", "light"], help="Gruvbox variant (default: dark)")
+    scaffold_parser.add_argument("--no-modernize", action="store_true", help="Do not inject modern 2026 UI enhancements (reading measure, scrollbars, rounded controls)")
     scaffold_parser.add_argument("--output", help="File path to save the .user.css")
     scaffold_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     scaffold_parser.add_argument("--profile", help="Path to custom profile")
@@ -282,6 +283,21 @@ def main() -> None:
     preview_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     preview_parser.add_argument("--profile", help="Path to custom profile")
     preview_parser.add_argument("--output", default="preview.png", help="Path to save preview screenshot")
+
+    # Command: extract-colors
+    extract_colors_parser = subparsers.add_parser("extract-colors", help="Extract pure color skeleton from CSS file or URL (port of Extract-ThemeColors)")
+    extract_colors_parser.add_argument("target", help="Local .css file path OR website URL")
+    extract_colors_parser.add_argument("--output", help="Path to write output CSS skeleton")
+    extract_colors_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    extract_colors_parser.add_argument("--profile", help="Path to custom profile")
+
+    # Command: audit-layout
+    audit_layout_parser = subparsers.add_parser("audit-layout", help="Detect dated design flaws (cramped text, runaway line width, fixed tables)")
+    audit_layout_parser.add_argument("url", help="Target URL")
+    audit_layout_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    audit_layout_parser.add_argument("--profile", help="Path to custom profile")
+    audit_layout_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    audit_layout_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
@@ -506,6 +522,7 @@ def main() -> None:
             url=args.url,
             name=args.name,
             variant=args.variant,
+            modernize=not getattr(args, "no_modernize", False),
             output_path=args.output,
         )
         if args.json:
@@ -553,6 +570,49 @@ def main() -> None:
             screenshot=True,
             output_screenshot=args.output,
         )
+
+    elif args.command == "extract-colors":
+        res = runner.extract_css_colors(args.target, output_path=args.output)
+        if args.output:
+            print(f"\n✨ Extracted color skeleton saved to: {args.output} ({len(res)} bytes)\n")
+        else:
+            print("\n" + "=" * 60)
+            print(f"🎨 Extracted Color Skeleton for {args.target}")
+            print("-" * 60)
+            print(res[:2000] + ("\n... [truncated]" if len(res) > 2000 else ""))
+            print("=" * 60 + "\n")
+
+    elif args.command == "audit-layout":
+        data = runner.audit_site_modernity(args.url)
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            flaws = data.get("flaws", {})
+            print("\n" + "=" * 60)
+            print(f"📐 Layout & Modernity Audit on {args.url}")
+            print("-" * 60)
+            if flaws.get("datedFonts"):
+                print("⚠️ Dated Fonts Detected:")
+                for f in flaws["datedFonts"]:
+                    print(f"  • <{f['tag']}> {f['fontFamily']} (sample: \"{f['sampleText']}\")")
+            if flaws.get("crampedTypography"):
+                print("\n⚠️ Cramped Typography (Font < 14px or line-height < 1.35):")
+                for c in flaws["crampedTypography"]:
+                    print(f"  • <{c['tag']}> size: {c['fontSize']}, line-height ratio: {c['lineHeightRatio']} (sample: \"{c['sampleText']}\")")
+            if flaws.get("excessiveLineLength"):
+                print("\n⚠️ Excessive Line Width (>950px wide reading measure):")
+                for e in flaws["excessiveLineLength"]:
+                    print(f"  • <{e['tag']}> width: {e['width']} (sample: \"{e['sampleText']}\")")
+            if flaws.get("fixedWidthContainers"):
+                print("\n⚠️ Fixed Non-Responsive Containers:")
+                for w in flaws["fixedWidthContainers"]:
+                    print(f"  • <{w['tag']}> width: {w['fixedWidth']} (class: {w.get('className')})")
+            if flaws.get("tableLayouts"):
+                print(f"\n⚠️ Non-tabular layout tables detected: {len(flaws['tableLayouts'])}")
+
+            if not any(flaws.values()):
+                print("🎉 Layout appears modern and clean!")
+            print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
