@@ -14,6 +14,7 @@ from .interaction import PageInteractor, execute_action_sequence
 from .test_rule import test_rule_impact
 from .scanner import scan_directory
 from .crawler import discover_sample_subpages
+from .archetype_crawler import crawl_site_archetypes, CrawlReport
 
 
 class AuditorRunner:
@@ -28,6 +29,7 @@ class AuditorRunner:
         target_url: Optional[str] = None,
         urls: Optional[List[str]] = None,
         sample_pages: int = 2,
+        deep_hunt: bool = False,
         output_dir: Optional[str | Path] = None,
     ) -> Dict[str, Any]:
         info = parse_userstyle(style_path)
@@ -68,6 +70,43 @@ class AuditorRunner:
                     page = context.new_page()
 
                 try:
+                    if deep_hunt and not urls:
+                        crawl_res = crawl_site_archetypes(
+                            page=page,
+                            start_url=base_url,
+                            css_content=css_to_apply,
+                            output_dir=out_path,
+                        )
+                        report["deep_hunt"] = {
+                            "stopped_reason": crawl_res.stopped_reason,
+                            "pages_scanned": crawl_res.total_pages_visited,
+                            "archetypes_count": len(crawl_res.archetypes),
+                            "archetypes": [
+                                {
+                                    "url": a.url,
+                                    "title": a.title,
+                                    "matched_selectors_count": len(a.matched_selectors),
+                                    "similarity_to_previous": a.similarity_to_previous,
+                                    "screenshot": a.screenshot_path,
+                                }
+                                for a in crawl_res.archetypes
+                            ],
+                        }
+                        report["tested_pages"] = [
+                            {"url": a.url, "matched_count": len(a.matched_selectors), "screenshot_after": a.screenshot_path}
+                            for a in crawl_res.archetypes
+                        ]
+                        report["css_audit"] = {
+                            "total_selectors": len(crawl_res.cumulative_matched_selectors) + len(crawl_res.remaining_dead_selectors),
+                            "cumulative_matched_count": len(crawl_res.cumulative_matched_selectors),
+                            "dead_count": len(crawl_res.remaining_dead_selectors),
+                            "invalid_count": 0,
+                            "parse_error": None,
+                            "matched": [{"selector": s, "total_count": 1} for s in crawl_res.cumulative_matched_selectors],
+                            "dead": [{"selector": s, "suggestions": []} for s in crawl_res.remaining_dead_selectors],
+                            "invalid": [],
+                        }
+                        return report
                     # 1. Navigate to base URL
                     page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1500)
@@ -417,5 +456,67 @@ class AuditorRunner:
                     page.wait_for_timeout(2000)
                     results = execute_action_sequence(page, actions)
                     return {"url": url, "action_results": results}
+                finally:
+                    context.close()
+
+    def map_site(
+        self,
+        url: str,
+        css_path: Optional[str | Path] = None,
+        max_archetypes: int = 8,
+        max_pages: int = 25,
+        output_dir: Optional[str | Path] = None,
+    ) -> Dict[str, Any]:
+        css_content = None
+        if css_path:
+            info = parse_userstyle(css_path)
+            css_content = info.get_combined_css_for_url(url)
+
+        out_path = Path(output_dir or "./audit-results/site-map").resolve()
+        out_path.mkdir(parents=True, exist_ok=True)
+
+        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+            with sync_playwright() as p:
+                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
+                if temp_profile:
+                    context = p.firefox.launch_persistent_context(
+                        user_data_dir=str(temp_profile),
+                        viewport={"width": 1440, "height": 900},
+                        **launch_kwargs,
+                    )
+                    page = context.new_page() if not context.pages else context.pages[0]
+                else:
+                    browser = p.firefox.launch(**launch_kwargs)
+                    context = browser.new_context(viewport={"width": 1440, "height": 900})
+                    page = context.new_page()
+
+                try:
+                    crawl_res = crawl_site_archetypes(
+                        page=page,
+                        start_url=url,
+                        css_content=css_content,
+                        max_archetypes=max_archetypes,
+                        max_pages=max_pages,
+                        output_dir=out_path,
+                    )
+                    return {
+                        "base_url": url,
+                        "pages_visited": crawl_res.total_pages_visited,
+                        "archetypes_count": len(crawl_res.archetypes),
+                        "stopped_reason": crawl_res.stopped_reason,
+                        "archetypes": [
+                            {
+                                "index": idx + 1,
+                                "url": a.url,
+                                "title": a.title,
+                                "similarity_to_previous": a.similarity_to_previous,
+                                "matched_selectors_count": len(a.matched_selectors),
+                                "screenshot": a.screenshot_path,
+                            }
+                            for idx, a in enumerate(crawl_res.archetypes)
+                        ],
+                        "cumulative_matched_count": len(crawl_res.cumulative_matched_selectors),
+                        "remaining_dead_count": len(crawl_res.remaining_dead_selectors),
+                    }
                 finally:
                     context.close()

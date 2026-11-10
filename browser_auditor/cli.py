@@ -156,6 +156,7 @@ def main() -> None:
     audit_parser.add_argument("--url", help="Override target base URL")
     audit_parser.add_argument("--urls", help="Comma-separated list of multiple URLs to audit across")
     audit_parser.add_argument("--sample-pages", type=int, default=2, help="Number of representative subpages to auto-discover and test (default: 2)")
+    audit_parser.add_argument("--deep-hunt", action="store_true", help="Crawl site for unique DOM archetypes until 100% selectors are satisfied or limit reached")
     audit_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile (run clean)")
     audit_parser.add_argument("--profile", help="Path to custom profile directory")
     audit_parser.add_argument("--headful", action="store_true", help="Run with visible browser window")
@@ -224,6 +225,18 @@ def main() -> None:
     inspect_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     inspect_parser.add_argument("--json", action="store_true", help="Output result as JSON")
 
+    # Command: map-site
+    map_parser = subparsers.add_parser("map-site", help="Crawl site for structurally unique page templates (archetypes)")
+    map_parser.add_argument("url", help="Starting base URL")
+    map_parser.add_argument("--css", help="Optional UserStyle file to guide selector hunting")
+    map_parser.add_argument("--max-archetypes", type=int, default=8, help="Maximum unique archetypes to discover (default: 8)")
+    map_parser.add_argument("--max-pages", type=int, default=25, help="Maximum total pages to visit (default: 25)")
+    map_parser.add_argument("--output", help="Directory to save archetype screenshots")
+    map_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    map_parser.add_argument("--profile", help="Path to custom profile")
+    map_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    map_parser.add_argument("--json", action="store_true", help="Output result as JSON")
+
     # Command: profile-info
     subparsers.add_parser("profile-info", help="Show detected Zen profile location")
 
@@ -259,6 +272,7 @@ def main() -> None:
                 target_url=args.url,
                 urls=urls_list,
                 sample_pages=getattr(args, "sample_pages", 2),
+                deep_hunt=getattr(args, "deep_hunt", False),
                 output_dir=args.output,
             )
             if args.json:
@@ -368,6 +382,35 @@ def main() -> None:
                 print(f"Display: {item.get('display')}, Visibility: {item.get('visibility')}")
                 print(f"Attributes: {item.get('attributes')}")
                 print(f"HTML snippet:\n{item.get('outerHTML')}\n")
+
+
+    elif args.command == "map-site":
+        data = runner.map_site(
+            url=args.url,
+            css_path=getattr(args, "css", None),
+            max_archetypes=getattr(args, "max_archetypes", 8),
+            max_pages=getattr(args, "max_pages", 25),
+            output_dir=args.output,
+        )
+        if args.json:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            archs = data.get("archetypes", [])
+            print("\n" + "=" * 70)
+            print(f"🗺️ Site Template Archetypes: {data.get('base_url')}")
+            print(f"Scanned {data.get('pages_visited')} pages | Discovered {len(archs)} unique structural layouts")
+            print(f"Termination: {data.get('stopped_reason')}")
+            print("-" * 70)
+            for a in archs:
+                matched_str = f" | {a['matched_selectors_count']} selectors" if a.get('matched_selectors_count') else ""
+                sim_str = f" (similarity: {a['similarity_to_previous']})" if a['similarity_to_previous'] > 0 else " (root)"
+                print(f" #{a['index']} [{a.get('title', 'No title')[:40]}]{sim_str}{matched_str}")
+                print(f"    URL: {a['url']}")
+                if a.get("screenshot"):
+                    print(f"    📸 {a['screenshot']}")
+            if data.get("cumulative_matched_count"):
+                print(f"\n📊 Total Selectors Matched: {data['cumulative_matched_count']} | Remaining dead: {data.get('remaining_dead_count', 0)}")
+            print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":
