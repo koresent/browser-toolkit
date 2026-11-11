@@ -7,7 +7,7 @@ from .browser_backend import safe_launch_persistent_context, safe_launch_browser
 from .profile import ZenProfileContext
 from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page
-from .js_auditor import inject_userscript, JSAuditResult, GM_SHIM_JS
+from .js_auditor import inject_userscript, JSAuditResult, GM_SHIM_JS, execute_userscript_on_navigation
 from .crawler import discover_sample_subpages
 from .navigation import safe_goto
 
@@ -104,20 +104,15 @@ def scan_directory(
                         info = parse_userscript(f)
                         url = info.get_target_url()
 
-                        js_res = JSAuditResult()
-                        page.add_init_script(GM_SHIM_JS)
-                        if info.run_at == "document-start":
-                            page.add_init_script(info.raw_js)
-
-                        safe_goto(page, url, wait_until="domcontentloaded", timeout=25000)
-                        page.wait_for_timeout(1500)
-
-                        if info.run_at != "document-start":
-                            try:
-                                page.evaluate(info.raw_js)
-                                js_res.executed = True
-                            except Exception as eval_err:
-                                js_res.errors.append(str(eval_err))
+                        js_res = execute_userscript_on_navigation(
+                            page,
+                            url=url,
+                            raw_js=info.raw_js,
+                            run_at=info.run_at,
+                            goto_timeout=25000,
+                            settle_ms=1500,
+                            track_mutations=False,
+                        )
 
                         status = "OK" if not js_res.errors else "BROKEN"
                         item = {

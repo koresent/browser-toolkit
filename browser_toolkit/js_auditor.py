@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page, ConsoleMessage, Error as PlaywrightError
 
 from .gm_shim import GM_FULL_SHIM_JS
+from .navigation import safe_goto
 from .mutation_tracker import (
     attach_mutation_tracker,
     collect_dom_mutations,
@@ -16,6 +17,11 @@ from .mutation_tracker import (
 )
 
 GM_SHIM_JS = GM_FULL_SHIM_JS
+
+NOISY_CONSOLE_SUBSTRINGS = (
+    "downloadable font:",
+    "Layout was forced before the page was fully loaded",
+)
 
 
 @dataclass
@@ -32,12 +38,29 @@ class JSAuditResult:
     command_invocation_result: Optional[Dict[str, Any]] = None
 
 
+def _format_console_location(loc: Any) -> str:
+    if isinstance(loc, dict):
+        url = loc.get("url", "")
+        line = loc.get("lineNumber", "")
+        return f"{url}:{line}" if url or line else ""
+    return str(loc) if loc else ""
+
+
 def setup_js_listeners(page: Page, result: JSAuditResult) -> None:
+    seen: set[tuple[str, str]] = set()
+
     def on_console(msg: ConsoleMessage):
+        text = msg.text
+        if any(noise in text for noise in NOISY_CONSOLE_SUBSTRINGS):
+            return
+        key = (msg.type, text)
+        if key in seen:
+            return
+        seen.add(key)
         result.console_messages.append({
             "type": msg.type,
-            "text": msg.text,
-            "location": str(msg.location),
+            "text": text,
+            "location": _format_console_location(msg.location),
         })
 
     def on_page_error(err: PlaywrightError):
@@ -45,6 +68,42 @@ def setup_js_listeners(page: Page, result: JSAuditResult) -> None:
 
     page.on("console", on_console)
     page.on("pageerror", on_page_error)
+
+
+def execute_userscript_on_navigation(
+    page: Page,
+    url: str,
+    raw_js: str,
+    run_at: str = "document-end",
+    result: Optional[JSAuditResult] = None,
+    goto_timeout: int = 30000,
+    settle_ms: int = 1000,
+    track_mutations: bool = True,
+) -> JSAuditResult:
+    """Navigates to URL with GM shim and executes a UserScript at the declared run-at stage."""
+    js_result = result if result is not None else JSAuditResult()
+    setup_js_listeners(page, js_result)
+    page.add_init_script(GM_FULL_SHIM_JS)
+    if track_mutations:
+        attach_mutation_tracker(page)
+
+    if run_at == "document-start":
+        page.add_init_script(raw_js)
+        js_result.executed = True
+
+    safe_goto(page, url, wait_until="domcontentloaded", timeout=goto_timeout)
+
+    if run_at != "document-start":
+        if settle_ms > 0:
+            page.wait_for_timeout(settle_ms)
+        try:
+            page.evaluate(raw_js)
+            js_result.executed = True
+        except Exception as e:
+            js_result.eval_error = str(e)
+            js_result.errors.append(f"Eval error: {e}")
+
+    return js_result
 
 
 def inject_userscript(

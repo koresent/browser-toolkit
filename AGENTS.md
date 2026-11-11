@@ -132,8 +132,12 @@ Direct programmatic access to browser extension state via IndexedDB:
 * **`session list --toon`**: Lists all active running sessions with their identifiers, current URLs, and uptime.
 * **`session status [--name ID] --toon`**: Checks session status, current URL, page title, and uptime.
 * **`session goto <url> [--name ID] --toon`**: Navigates active session to a URL.
-* **`session eval <script> [--name ID] --toon`**: Evaluates JavaScript expression in the active session page.
+* **`session eval [script] [--file PATH] [--name ID] --toon`**: Evaluates JavaScript expression (inline, `'-'` via stdin, or `--file`) in the active session page.
 * **`session eval-many <scripts_json_or_file> [--name ID] --toon`**: Evaluates a batch dictionary of JavaScript expressions in one call.
+* **`session inspect --selector <sel> [--rules] [--properties PROPS] [--actions JSON] [--css RULE_OR_FILE] [--pseudo PSEUDO] [--name ID] --toon`**: Inspects elements, computed styles, custom properties, and matching CSS rules inside the active session.
+* **`session search [--text TEXT] [--keyword KW] [--role ROLE] [--tag TAG] [--wait SEL_OR_MS] [--actions JSON] [--name ID] --toon`**: Searches DOM and synthesizes resilient selectors inside the active session.
+* **`session inject-css <css_or_file> [--name ID] --toon`**: Injects a raw CSS snippet or compiled `.user.css` style into the active session page.
+* **`session inject-script <file_or_js> [--settle-ms MS] [--name ID] --toon`**: Injects a `.user.js` UserScript or raw JavaScript file into the active session with GM polyfills.
 * **`session interact --actions <json_or_file> [--name ID] --toon`**: Executes action sequence in the active session.
 * **`session screenshot [--selector SEL] [--output PATH] [--full-page] [--name ID] --toon`**: Captures screenshot from the active session.
 * **`session stop [--name ID] --toon`**: Cleanly shuts down daemon, context, and temp profile for session `ID`.

@@ -3,7 +3,12 @@ from playwright.sync_api import sync_playwright
 
 from browser_toolkit.gm_shim import GM_FULL_SHIM_JS
 from browser_toolkit.mutation_tracker import attach_mutation_tracker, collect_dom_mutations
-from browser_toolkit.js_auditor import inject_userscript
+from browser_toolkit.js_auditor import (
+    JSAuditResult,
+    execute_userscript_on_navigation,
+    inject_userscript,
+    setup_js_listeners,
+)
 from browser_toolkit.spa_checker import check_spa_resilience
 
 
@@ -126,6 +131,39 @@ class TestJSToolkit(unittest.TestCase):
 
         self.assertTrue(rep.survived)
         self.assertIn("#injected-header", rep.retained_selectors)
+
+    def test_document_start_execution_and_console_noise_filter(self):
+        import tempfile, os
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
+            f.write("<!DOCTYPE html><html><body><p>Hello</p></body></html>")
+            file_url = f"file://{f.name}"
+
+        page = self.browser.new_page()
+        try:
+            script = """
+            window.__earlyFlag = 'ran_at_start';
+            console.log('downloadable font: glyf: Glyph bbox was incorrect');
+            console.log('userscript log line');
+            console.log('userscript log line');
+            """
+            res = execute_userscript_on_navigation(
+                page,
+                url=file_url,
+                raw_js=script,
+                run_at="document-start",
+                settle_ms=100,
+            )
+            self.assertTrue(res.executed)
+            self.assertEqual(page.evaluate("() => window.__earlyFlag"), "ran_at_start")
+            texts = [m["text"] for m in res.console_messages]
+            self.assertNotIn("downloadable font: glyf: Glyph bbox was incorrect", texts)
+            self.assertEqual(texts.count("userscript log line"), 1)
+        finally:
+            page.close()
+            try:
+                os.remove(file_url.replace("file://", ""))
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

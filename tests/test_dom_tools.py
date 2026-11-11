@@ -2,6 +2,7 @@ import unittest
 from playwright.sync_api import sync_playwright
 
 from browser_toolkit.css_auditor import audit_css_on_page
+from browser_toolkit.inspector import inspect_page_selector
 from browser_toolkit.interaction import PageInteractor, execute_action_sequence
 from browser_toolkit.search import JS_SEARCH_DOM, search_dom
 from browser_toolkit.selector_generator import JS_SELECTOR_SYNTHESIZER
@@ -223,6 +224,51 @@ class TestDOMTools(unittest.TestCase):
         self.assertGreater(len(btn_impact["matched"]), 0)
         btn_item = btn_impact["matched"][0]
         self.assertFalse(btn_item["isLargeElement"])
+        page.close()
+
+    def test_click_text_intercepted_fallback(self):
+        page = self.browser.new_page()
+        page.set_content("""
+        <!DOCTYPE html>
+        <html>
+        <body>
+          <div id="tab-wrap" role="tab" style="position: relative; width: 120px; height: 40px;">
+            <span class="label">Personal Tab</span>
+            <div id="overlay" style="position: absolute; inset: 0; z-index: 2;"></div>
+          </div>
+          <script>
+            window.__tabClicked = false;
+            document.getElementById("tab-wrap").addEventListener("click", () => {
+              window.__tabClicked = true;
+            });
+          </script>
+        </body>
+        </html>
+        """)
+        interactor = PageInteractor(page)
+        self.assertTrue(interactor.click_text("Personal Tab", timeout=3000))
+        self.assertTrue(page.evaluate("() => window.__tabClicked"))
+        page.close()
+
+    def test_inspect_pseudo_rules(self):
+        page = self.browser.new_page()
+        page.set_content("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            .avatar.is-online::after { content: " "; background-color: rgb(10, 198, 48); }
+          </style>
+        </head>
+        <body>
+          <div class="avatar is-online">A</div>
+        </body>
+        </html>
+        """)
+        res = inspect_page_selector(page, ".avatar.is-online", include_rules=True, pseudo="::after")
+        self.assertEqual(res["count"], 1)
+        rules = res["items"][0]["matchedRules"]
+        self.assertTrue(any("::after" in r["selector"] for r in rules))
         page.close()
 
 class TestInspectElement(unittest.TestCase):

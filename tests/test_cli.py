@@ -162,6 +162,31 @@ class TestCLI(unittest.TestCase):
         args_stop = self.parser.parse_args(["session", "stop"])
         self.assertEqual(args_stop.session_command, "stop")
 
+        args_eval_file = self.parser.parse_args(["session", "eval", "--file", "probe.js", "--name", "s1"])
+        self.assertEqual(args_eval_file.session_command, "eval")
+        self.assertEqual(args_eval_file.file, "probe.js")
+        self.assertEqual(args_eval_file.name, "s1")
+
+        args_s_inspect = self.parser.parse_args(["session", "inspect", "--selector", ".avatar", "--rules", "--pseudo", "::after", "--name", "tg"])
+        self.assertEqual(args_s_inspect.session_command, "inspect")
+        self.assertEqual(args_s_inspect.selector, ".avatar")
+        self.assertTrue(args_s_inspect.rules)
+        self.assertEqual(args_s_inspect.pseudo, "::after")
+
+        args_s_search = self.parser.parse_args(["session", "search", "--text", "Login", "--tag", "button", "--name", "tg"])
+        self.assertEqual(args_s_search.session_command, "search")
+        self.assertEqual(args_s_search.text, "Login")
+        self.assertEqual(args_s_search.tag, "button")
+
+        args_inj_css = self.parser.parse_args(["session", "inject-css", "theme.user.css", "--name", "tg"])
+        self.assertEqual(args_inj_css.session_command, "inject-css")
+        self.assertEqual(args_inj_css.css, "theme.user.css")
+
+        args_inj_js = self.parser.parse_args(["session", "inject-script", "script.user.js", "--settle-ms", "200"])
+        self.assertEqual(args_inj_js.session_command, "inject-script")
+        self.assertEqual(args_inj_js.file, "script.user.js")
+        self.assertEqual(args_inj_js.settle_ms, 200)
+
     def test_profile_info_args(self):
         args = self.parser.parse_args(["profile-info", "--toon"])
         self.assertEqual(args.command, "profile-info")

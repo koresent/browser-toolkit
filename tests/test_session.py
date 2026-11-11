@@ -48,6 +48,36 @@ class TestSessionLifecycle(unittest.TestCase):
         self.assertEqual(interact_res.get("status"), "ok")
         self.assertEqual(len(interact_res.get("results", [])), 1)
 
+        # Inject CSS + Inspect + Search + Inject Script
+        css_res = send_session_command({
+            "action": "inject_css",
+            "css": "body { background-color: rgb(18, 52, 86); }",
+        }, session_name="default")
+        self.assertEqual(css_res.get("status"), "ok")
+
+        script_res = send_session_command({
+            "action": "inject_script",
+            "raw_js": "const d = document.createElement('div'); d.id = 'sess-injected'; d.textContent = 'Session Widget'; document.body.appendChild(d);",
+            "settle_ms": 100,
+        }, session_name="default")
+        self.assertEqual(script_res.get("status"), "ok")
+        self.assertTrue(script_res.get("executed"))
+
+        inspect_res = send_session_command({
+            "action": "inspect",
+            "selector": "#sess-injected",
+            "rules": True,
+        }, session_name="default")
+        self.assertEqual(inspect_res.get("status"), "ok")
+        self.assertEqual(inspect_res.get("result", {}).get("count"), 1)
+
+        search_res = send_session_command({
+            "action": "search",
+            "text": "Session Widget",
+        }, session_name="default")
+        self.assertEqual(search_res.get("status"), "ok")
+        self.assertGreaterEqual(search_res.get("matches_count", 0), 1)
+
         # Stop
         stop_res = stop_session("default")
         self.assertEqual(stop_res.get("status"), "ok")

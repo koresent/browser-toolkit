@@ -14,9 +14,13 @@ from typing import Any, Dict, Optional
 from playwright.sync_api import sync_playwright
 
 from .browser_backend import safe_launch_browser, safe_launch_persistent_context
+from .inspector import inject_css_or_file, inspect_page_selector
 from .interaction import PageInteractor, execute_action_sequence
+from .js_auditor import inject_userscript
 from .navigation import safe_goto
+from .parser import parse_userscript
 from .profile import ZenProfileContext
+from .search import search_dom
 
 DEFAULT_IDLE_TIMEOUT = 900.0  # 15 minutes
 
@@ -207,6 +211,83 @@ class SessionServer:
             actions = req.get("actions", [])
             results = execute_action_sequence(page, actions)
             return {"status": "ok", "session_name": self.session_name, "results": results}
+
+        if action == "inspect":
+            selector = req.get("selector", "")
+            if not selector:
+                return {"status": "error", "message": "Missing 'selector' parameter"}
+            data = inspect_page_selector(
+                page,
+                selector=selector,
+                actions=req.get("actions"),
+                properties=req.get("properties"),
+                include_rules=bool(req.get("rules", False)),
+                css=req.get("css"),
+                pseudo=req.get("pseudo"),
+                target_url=page.url,
+            )
+            return {
+                "status": "ok",
+                "session_name": self.session_name,
+                "url": page.url,
+                "selector": selector,
+                "result": data,
+            }
+
+        if action == "search":
+            results = search_dom(
+                page,
+                text=req.get("text"),
+                keyword=req.get("keyword"),
+                role=req.get("role"),
+                tag=req.get("tag"),
+                wait=req.get("wait"),
+                actions=req.get("actions"),
+            )
+            return {
+                "status": "ok",
+                "session_name": self.session_name,
+                "url": page.url,
+                "matches_count": len(results),
+                "matches": results,
+            }
+
+        if action == "inject_css":
+            css_arg = req.get("css", "")
+            if not css_arg:
+                return {"status": "error", "message": "Missing 'css' parameter"}
+            inject_css_or_file(page, css_arg, target_url=page.url)
+            return {
+                "status": "ok",
+                "session_name": self.session_name,
+                "url": page.url,
+            }
+
+        if action == "inject_script":
+            raw_js = req.get("raw_js")
+            file_arg = req.get("file")
+            if raw_js is None and file_arg:
+                p_js = Path(file_arg)
+                if not p_js.is_file():
+                    return {"status": "error", "message": f"Script file not found: {file_arg}"}
+                if p_js.name.endswith(".user.js"):
+                    raw_js = parse_userscript(p_js).raw_js
+                else:
+                    raw_js = p_js.read_text(encoding="utf-8")
+            if not raw_js:
+                return {"status": "error", "message": "Missing 'file' or 'raw_js' parameter"}
+            settle_ms = int(req.get("settle_ms", 500))
+            audit_res = inject_userscript(page, raw_js=raw_js, run_at="document-end", settle_ms=settle_ms)
+            return {
+                "status": "ok" if audit_res.executed and not audit_res.eval_error else "error",
+                "session_name": self.session_name,
+                "url": page.url,
+                "executed": audit_res.executed,
+                "eval_error": audit_res.eval_error,
+                "errors": audit_res.errors,
+                "added_count": len(audit_res.mutations.added_nodes),
+                "registered_commands": audit_res.registered_commands,
+            }
 
         if action == "screenshot":
             shots_dir = Path(tempfile.gettempdir()) / "browser-toolkit" / "screenshots"

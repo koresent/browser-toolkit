@@ -547,15 +547,26 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     add_output_args(scan_parser)
 
+    def add_search_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--text", help="Search by visible text")
+        p.add_argument("--keyword", help="Search keyword in class, id, aria attributes")
+        p.add_argument("--role", help="Search by ARIA role")
+        p.add_argument("--tag", help="Filter by HTML tag")
+        p.add_argument("--wait", help="Wait for selector or ms before searching")
+        p.add_argument("--actions", help="JSON string or file path containing user actions before searching")
+
+    def add_inspect_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--selector", required=True, help="CSS selector to inspect")
+        p.add_argument("--actions", help="JSON string or file path containing user actions before inspecting")
+        p.add_argument("--properties", help="Comma-separated CSS properties to inspect (e.g. 'color,border-radius')")
+        p.add_argument("--rules", action="store_true", help="Inspect all matching CSS rules from stylesheets")
+        p.add_argument("--css", help="Optional CSS rule string or .user.css path to inject before inspecting")
+        p.add_argument("--pseudo", help="Pseudo-element to inspect (e.g. '::before', '::after')")
+
     # Command: search
     search_parser = subparsers.add_parser("search", help="Search DOM by text/keyword and synthesize selectors")
     search_parser.add_argument("url", help="Target URL")
-    search_parser.add_argument("--text", help="Search by visible text")
-    search_parser.add_argument("--keyword", help="Search keyword in class, id, aria attributes")
-    search_parser.add_argument("--role", help="Search by ARIA role")
-    search_parser.add_argument("--tag", help="Filter by HTML tag")
-    search_parser.add_argument("--wait", help="Wait for selector or ms before searching")
-    search_parser.add_argument("--actions", help="JSON string or file path containing user actions before searching")
+    add_search_args(search_parser)
     search_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     search_parser.add_argument("--profile", help="Path to custom profile")
     search_parser.add_argument("--headful", action="store_true", help="Run with visible window")
@@ -596,12 +607,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Command: inspect
     inspect_parser = subparsers.add_parser("inspect", help="Inspect element computed styles, custom properties, and CSS rules on a live URL")
     inspect_parser.add_argument("url", help="Target URL to open")
-    inspect_parser.add_argument("--selector", required=True, help="CSS selector to inspect")
-    inspect_parser.add_argument("--actions", help="JSON string or file path containing user actions before inspecting")
-    inspect_parser.add_argument("--properties", help="Comma-separated CSS properties to inspect (e.g. 'color,border-radius')")
-    inspect_parser.add_argument("--rules", action="store_true", help="Inspect all matching CSS rules from stylesheets")
-    inspect_parser.add_argument("--css", help="Optional CSS rule string or .user.css path to inject before inspecting")
-    inspect_parser.add_argument("--pseudo", help="Pseudo-element to inspect (e.g. '::before', '::after')")
+    add_inspect_args(inspect_parser)
     inspect_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     inspect_parser.add_argument("--profile", help="Path to custom profile")
     inspect_parser.add_argument("--headful", action="store_true", help="Run with visible window")
@@ -876,9 +882,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_session_name_arg(s_goto)
     add_output_args(s_goto)
 
-    # session eval <script> [--name NAME]
+    # session eval [script] [--file PATH] [--name NAME]
     s_eval = session_sub.add_parser("eval", help="Evaluate JavaScript expression in active session")
-    s_eval.add_argument("script", help="JavaScript code to evaluate")
+    s_eval.add_argument("script", nargs="?", help="JavaScript code to evaluate (or '-' to read from stdin)")
+    s_eval.add_argument("--file", "-f", help="Path to JavaScript file to evaluate")
     add_session_name_arg(s_eval)
     add_output_args(s_eval)
 
@@ -887,6 +894,31 @@ def build_parser() -> argparse.ArgumentParser:
     s_eval_many.add_argument("scripts", help="JSON dictionary of scripts or path to JSON file")
     add_session_name_arg(s_eval_many)
     add_output_args(s_eval_many)
+
+    # session inspect --selector SEL [...] [--name NAME]
+    s_inspect = session_sub.add_parser("inspect", help="Inspect elements, computed styles, and CSS rules in active session")
+    add_inspect_args(s_inspect)
+    add_session_name_arg(s_inspect)
+    add_output_args(s_inspect)
+
+    # session search [...] [--name NAME]
+    s_search = session_sub.add_parser("search", help="Search DOM and synthesize selectors in active session")
+    add_search_args(s_search)
+    add_session_name_arg(s_search)
+    add_output_args(s_search)
+
+    # session inject-css <css_or_file> [--name NAME]
+    s_inj_css = session_sub.add_parser("inject-css", help="Inject CSS string or .user.css file into active session")
+    s_inj_css.add_argument("css", help="CSS code or path to .css/.user.css file")
+    add_session_name_arg(s_inj_css)
+    add_output_args(s_inj_css)
+
+    # session inject-script <file_or_js> [--settle-ms MS] [--name NAME]
+    s_inj_js = session_sub.add_parser("inject-script", help="Inject .user.js or JavaScript file into active session with GM polyfills")
+    s_inj_js.add_argument("file", help="Path to .user.js or .js file (or inline JS string)")
+    s_inj_js.add_argument("--settle-ms", type=int, default=500, help="Wait time in ms after injection (default: 500)")
+    add_session_name_arg(s_inj_js)
+    add_output_args(s_inj_js)
 
     # session interact --actions <json_or_file> [--name NAME]
     s_interact = session_sub.add_parser("interact", help="Perform sequence of user actions in active session")
@@ -1007,7 +1039,15 @@ def main() -> None:
             sys.exit(0 if res.get("status") == "ok" else 1)
 
         elif session_cmd == "eval":
-            res = send_session_command({"action": "eval", "script": args.script}, session_name=session_name)
+            script_code = args.script
+            if getattr(args, "file", None):
+                script_code = Path(args.file).read_text(encoding="utf-8")
+            elif script_code == "-":
+                script_code = sys.stdin.read()
+            elif not script_code:
+                sys.stderr.write("Error: Provide a JavaScript expression, '-' for stdin, or '--file <path>'.\n")
+                sys.exit(2)
+            res = send_session_command({"action": "eval", "script": script_code}, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -1025,6 +1065,59 @@ def main() -> None:
                 res,
                 args,
                 lambda d: print(d.get("results")),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "inspect":
+            props_list = [p.strip() for p in args.properties.split(",") if p.strip()] if args.properties else None
+            actions_list = parse_actions_arg(args.actions)
+            css_val = str(Path(args.css).resolve()) if args.css and Path(args.css).is_file() else args.css
+            res = send_session_command({
+                "action": "inspect",
+                "selector": args.selector,
+                "actions": actions_list,
+                "properties": props_list,
+                "rules": args.rules,
+                "css": css_val,
+                "pseudo": args.pseudo,
+            }, session_name=session_name)
+            output_result(res, args, print_inspect_summary)
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "search":
+            actions_list = parse_actions_arg(args.actions)
+            res = send_session_command({
+                "action": "search",
+                "text": args.text,
+                "keyword": args.keyword,
+                "role": args.role,
+                "tag": args.tag,
+                "wait": args.wait,
+                "actions": actions_list,
+            }, session_name=session_name)
+            output_result(res, args, print_search_results)
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "inject-css":
+            css_arg = args.css
+            if Path(css_arg).is_file():
+                css_arg = str(Path(css_arg).resolve())
+            res = send_session_command({"action": "inject_css", "css": css_arg}, session_name=session_name)
+            output_result(res, args, lambda d: print(f"CSS injected into session '{d.get('session_name')}'"))
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "inject-script":
+            payload: Dict[str, Any] = {"action": "inject_script", "settle_ms": args.settle_ms}
+            p_js = Path(args.file)
+            if p_js.is_file():
+                payload["file"] = str(p_js.resolve())
+            else:
+                payload["raw_js"] = args.file
+            res = send_session_command(payload, session_name=session_name)
+            output_result(
+                res,
+                args,
+                lambda d: print(f"Script injected (executed={d.get('executed')}, added_nodes={d.get('added_count', 0)})"),
             )
             sys.exit(0 if res.get("status") == "ok" else 1)
 

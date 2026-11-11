@@ -16,11 +16,20 @@ class PageInteractor:
             raise RuntimeError(f"Failed to click '{selector}': {e}")
 
     def click_text(self, text: str, timeout: int = 5000, force: bool = False) -> bool:
-        """Clicks an element containing the given text."""
+        """Clicks an element containing the given text, falling back to force-click if an ancestor overlay intercepts pointer events."""
+        loc = self.page.get_by_text(text, exact=False).first
         try:
-            loc = self.page.get_by_text(text, exact=False).first
-            loc.click(timeout=timeout, force=force)
-            return True
+            if force:
+                loc.click(timeout=timeout, force=True)
+                return True
+            try:
+                loc.click(timeout=min(timeout, 2000), force=False)
+                return True
+            except Exception as inner_exc:
+                if "intercepts pointer events" in str(inner_exc):
+                    loc.click(timeout=timeout, force=True)
+                    return True
+                raise
         except Exception as e:
             raise RuntimeError(f"Failed to click text '{text}': {e}")
 

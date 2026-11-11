@@ -10,7 +10,8 @@ from playwright.sync_api import sync_playwright
 from .profile import ZenProfileContext
 from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page, CSSAuditResult
-from .js_auditor import inject_userscript, setup_js_listeners, JSAuditResult
+from .js_auditor import inject_userscript, setup_js_listeners, JSAuditResult, execute_userscript_on_navigation
+from .inspector import inspect_page_selector
 from .search import search_dom
 from .interaction import PageInteractor, execute_action_sequence
 from .test_rule import test_rule_impact
@@ -258,24 +259,14 @@ class AuditorRunner:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
-                    js_result = JSAuditResult()
-                    setup_js_listeners(page, js_result)
-                    page.add_init_script(GM_FULL_SHIM_JS)
-                    attach_mutation_tracker(page)
-
-                    if info.run_at == "document-start":
-                        page.add_init_script(info.raw_js)
-
-                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
-
-                    if info.run_at != "document-start":
-                        page.wait_for_timeout(1000)
-                        try:
-                            page.evaluate(info.raw_js)
-                            js_result.executed = True
-                        except Exception as e:
-                            js_result.eval_error = str(e)
-                            js_result.errors.append(f"Eval error: {e}")
+                    js_result = execute_userscript_on_navigation(
+                        page,
+                        url=url,
+                        raw_js=info.raw_js,
+                        run_at=info.run_at,
+                        goto_timeout=30000,
+                        settle_ms=1000,
+                    )
 
                     page.wait_for_timeout(1500)
 
@@ -345,121 +336,15 @@ class AuditorRunner:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(1000)
 
-                    if css:
-                        css_content = css
-                        p_css = Path(css)
-                        if p_css.exists():
-                            info = parse_userstyle(p_css)
-                            css_content = info.get_combined_css_for_url(url)
-                        page.add_style_tag(content=css_content)
-
-                    if actions:
-                        execute_action_sequence(page, actions)
-
-                    eval_opts = {
-                        "properties": properties or [],
-                        "includeRules": bool(include_rules),
-                        "pseudo": pseudo,
-                    }
-
-                    data = page.evaluate(
-                        """
-                        ([sel, opts]) => {
-                            const els = document.querySelectorAll(sel);
-                            if (els.length === 0) return { count: 0, items: [] };
-
-                            const reqProps = opts.properties || [];
-                            const includeRules = Boolean(opts.includeRules);
-                            const pseudo = opts.pseudo || null;
-
-                            function getMatchedRules(el) {
-                                const matched = [];
-                                for (const sheet of document.styleSheets) {
-                                    try {
-                                        const rules = sheet.cssRules || sheet.rules;
-                                        if (!rules) continue;
-                                        for (const rule of rules) {
-                                            if (rule.type === CSSRule.STYLE_RULE && rule.selectorText) {
-                                                try {
-                                                    if (el.matches(rule.selectorText)) {
-                                                        const decl = {};
-                                                        for (let i = 0; i < rule.style.length; i++) {
-                                                            const p = rule.style[i];
-                                                            decl[p] = rule.style.getPropertyValue(p);
-                                                        }
-                                                        matched.push({
-                                                            selector: rule.selectorText,
-                                                            properties: decl,
-                                                            source: sheet.href ? sheet.href.split('/').pop().split('?')[0] : 'inline'
-                                                        });
-                                                    }
-                                                } catch (_) {}
-                                            }
-                                        }
-                                    } catch (_) {}
-                                }
-                                return matched;
-                            }
-
-                            function getCustomVars(comp) {
-                                const vars = {};
-                                for (let i = 0; i < comp.length; i++) {
-                                    const p = comp[i];
-                                    if (p.startsWith('--')) {
-                                        vars[p] = comp.getPropertyValue(p).trim();
-                                    }
-                                }
-                                return vars;
-                            }
-
-                            const items = [];
-                            for (let i = 0; i < Math.min(els.length, 5); i++) {
-                                const el = els[i];
-                                const comp = window.getComputedStyle(el, pseudo);
-                                const rect = el.getBoundingClientRect();
-
-                                const attrs = {};
-                                for (const a of el.attributes) {
-                                    attrs[a.name] = a.value;
-                                }
-
-                                const computed = {};
-                                if (reqProps.length > 0) {
-                                    for (const p of reqProps) {
-                                        computed[p] = comp.getPropertyValue(p) || comp[p] || '';
-                                    }
-                                } else {
-                                    computed.display = comp.display;
-                                    computed.visibility = comp.visibility;
-                                    computed.opacity = comp.opacity;
-                                    computed.color = comp.color;
-                                    computed.backgroundColor = comp.backgroundColor;
-                                    computed.backgroundImage = comp.backgroundImage;
-                                    computed.borderRadius = comp.borderRadius;
-                                    computed.boxShadow = comp.boxShadow;
-                                    computed.border = comp.border;
-                                    computed.fill = comp.fill;
-                                }
-
-                                const item = {
-                                    tagName: el.tagName.toLowerCase(),
-                                    attributes: attrs,
-                                    rect: { width: Math.round(rect.width), height: Math.round(rect.height) },
-                                    computed: computed,
-                                    customProperties: getCustomVars(comp),
-                                    outerHTML: el.outerHTML.slice(0, 500)
-                                };
-
-                                if (includeRules) {
-                                    item.matchedRules = getMatchedRules(el);
-                                }
-
-                                items.push(item);
-                            }
-                            return { count: els.length, items: items };
-                        }
-                        """,
-                        [selector, eval_opts],
+                    data = inspect_page_selector(
+                        page,
+                        selector=selector,
+                        actions=actions,
+                        properties=properties,
+                        include_rules=include_rules,
+                        css=css,
+                        pseudo=pseudo,
+                        target_url=url,
                     )
                     return {"url": url, "selector": selector, "result": data}
                 finally:
@@ -848,24 +733,14 @@ class AuditorRunner:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
-                    js_result = JSAuditResult()
-                    setup_js_listeners(page, js_result)
-                    page.add_init_script(GM_FULL_SHIM_JS)
-                    attach_mutation_tracker(page)
-
-                    if info.run_at == "document-start":
-                        page.add_init_script(info.raw_js)
-
-                    safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
-
-                    if info.run_at != "document-start":
-                        page.wait_for_timeout(1000)
-                        try:
-                            page.evaluate(info.raw_js)
-                            js_result.executed = True
-                        except Exception as e:
-                            js_result.eval_error = str(e)
-                            js_result.errors.append(f"Eval error: {e}")
+                    js_result = execute_userscript_on_navigation(
+                        page,
+                        url=url,
+                        raw_js=info.raw_js,
+                        run_at=info.run_at,
+                        goto_timeout=30000,
+                        settle_ms=1000,
+                    )
 
                     page.wait_for_timeout(1000)
 
