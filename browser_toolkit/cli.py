@@ -471,16 +471,19 @@ def print_diff_scripts(diff: Dict[str, Any]) -> None:
 TEMP_TOOLKIT_DIR = Path(tempfile.gettempdir()) / "browser-toolkit"
 
 
-def add_output_args(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--toon", action="store_true", help="Output result as TOON (Token-Oriented Object Notation)")
-    p.add_argument("--json", action="store_true", help="Output result as compact JSON")
-    p.add_argument("--format", choices=["text", "json", "json-pretty", "toon"], help="Explicit output format")
+def add_output_args(p: argparse.ArgumentParser, is_root: bool = False) -> None:
+    default_flag = False if is_root else argparse.SUPPRESS
+    default_format = None if is_root else argparse.SUPPRESS
+    p.add_argument("--toon", action="store_true", default=default_flag, help="Output result as TOON (Token-Oriented Object Notation)")
+    p.add_argument("--json", action="store_true", default=default_flag, help="Output result as compact JSON")
+    p.add_argument("--format", choices=["text", "json", "json-pretty", "toon"], default=default_format, help="Explicit output format")
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="browser-toolkit",
         description="Audit, inspect, and test UserStyles and UserScripts using Zen Browser profile and Playwright Gecko.",
     )
+    add_output_args(parser, is_root=True)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Command: audit
@@ -786,7 +789,8 @@ def build_parser() -> argparse.ArgumentParser:
     inst_script_p.add_argument("--profile", help="Path to custom profile")
 
     # Command: profile-info
-    subparsers.add_parser("profile-info", help="Show detected Zen profile location")
+    prof_p = subparsers.add_parser("profile-info", help="Show detected Zen profile location")
+    add_output_args(prof_p)
 
     return parser
 
@@ -797,11 +801,16 @@ def main() -> None:
 
     if args.command == "profile-info":
         prof = find_zen_profile()
-        if prof:
-            print(f"Zen profile found: {prof}")
-        else:
-            print("Zen profile not found.")
-        sys.exit(0)
+        data = {
+            "profile_found": bool(prof),
+            "profile_dir": str(prof) if prof else None,
+        }
+        output_result(
+            data,
+            args,
+            lambda d: print(f"Zen profile found: {d['profile_dir']}" if d["profile_found"] else "Zen profile not found."),
+        )
+        sys.exit(0 if prof else 1)
 
     runner = AuditorRunner(
         profile_path=getattr(args, "profile", None),

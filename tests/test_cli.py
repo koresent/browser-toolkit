@@ -83,6 +83,15 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.ext_action, "backup")
         self.assertEqual(args.out_stylus, "custom-stylus.json")
 
+    def test_profile_info_args(self):
+        args = self.parser.parse_args(["profile-info", "--toon"])
+        self.assertEqual(args.command, "profile-info")
+        self.assertTrue(args.toon)
+
+        args_root = self.parser.parse_args(["--toon", "profile-info"])
+        self.assertEqual(args_root.command, "profile-info")
+        self.assertTrue(args_root.toon)
+
 
 if __name__ == "__main__":
     unittest.main()

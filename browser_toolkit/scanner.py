@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from playwright.sync_api import sync_playwright
 
+from .browser_backend import safe_launch_persistent_context, safe_launch_browser
 from .profile import ZenProfileContext
 from .parser import parse_userstyle, parse_userscript
 from .css_auditor import audit_css_on_page
@@ -33,12 +34,13 @@ def scan_directory(
         with sync_playwright() as p:
             launch_kwargs: Dict[str, Any] = {"headless": headless}
             if temp_profile:
-                context = p.firefox.launch_persistent_context(
+                context = safe_launch_persistent_context(
+                    p,
                     user_data_dir=str(temp_profile),
                     **launch_kwargs,
                 )
             else:
-                browser = p.firefox.launch(**launch_kwargs)
+                browser = safe_launch_browser(p, **launch_kwargs)
                 context = browser.new_context()
 
             try:

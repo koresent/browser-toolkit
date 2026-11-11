@@ -12,6 +12,7 @@ from playwright.sync_api import sync_playwright
 
 from .profile import ZenProfileContext
 from .navigation import safe_goto
+from .browser_backend import safe_launch_persistent_context, safe_launch_browser
 
 COLOR_VAL_REGEX = re.compile(
     r"(#[0-9a-fA-F]{3,8}\b|rgba?\s*\(|hsla?\s*\(|color\s*\(|\b(transparent|currentcolor|white|black|red|green|blue|yellow|gray|grey)\b)",
@@ -112,10 +113,10 @@ def extract_colors_from_file_or_url(
             with sync_playwright() as p:
                 launch_kwargs = {"headless": True}
                 if temp_prof:
-                    ctx = p.firefox.launch_persistent_context(user_data_dir=str(temp_prof), **launch_kwargs)
+                    ctx = safe_launch_persistent_context(p, user_data_dir=str(temp_prof), **launch_kwargs)
                     page = ctx.new_page() if not ctx.pages else ctx.pages[0]
                 else:
-                    b = p.firefox.launch(**launch_kwargs)
+                    b = safe_launch_browser(p, **launch_kwargs)
                     ctx = b.new_context()
                     page = ctx.new_page()
 

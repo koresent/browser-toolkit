@@ -29,6 +29,11 @@ from .mutation_tracker import attach_mutation_tracker, collect_dom_mutations
 from .extension_manager import ExtensionManager
 from .sync_server import run_sync_server
 from .navigation import safe_goto
+from .browser_backend import (
+    ensure_playwright_browser,
+    safe_launch_persistent_context,
+    safe_launch_browser,
+)
 
 
 class AuditorRunner:
@@ -36,6 +41,37 @@ class AuditorRunner:
         self.profile_path = profile_path
         self.use_profile = use_profile
         self.headless = headless
+
+    def _launch_browser_context(
+        self,
+        p: Any,
+        temp_profile: Optional[Path],
+        viewport: Optional[Dict[str, int]] = None,
+        bypass_csp: bool = True,
+        **extra_kwargs: Any,
+    ) -> Tuple[Any, Any]:
+        vp = viewport or {"width": 1440, "height": 900}
+        launch_kwargs: Dict[str, Any] = {
+            "headless": self.headless,
+            **extra_kwargs,
+        }
+        if bypass_csp:
+            launch_kwargs["bypass_csp"] = True
+
+        if temp_profile:
+            context = safe_launch_persistent_context(
+                p,
+                user_data_dir=str(temp_profile),
+                viewport=vp,
+                **launch_kwargs,
+            )
+            page = context.new_page() if not context.pages else context.pages[0]
+        else:
+            browser = safe_launch_browser(p, headless=self.headless, **extra_kwargs)
+            context = browser.new_context(viewport=vp, bypass_csp=bypass_csp)
+            page = context.new_page()
+
+        return context, page
 
     def audit_style(
         self,
@@ -68,22 +104,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {
-                    "headless": self.headless,
-                    "bypass_csp": True,
-                }
-
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     if deep_hunt and not urls:
@@ -233,22 +254,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {
-                    "headless": self.headless,
-                    "bypass_csp": True,
-                }
-
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     js_result = JSAuditResult()
@@ -323,17 +329,7 @@ class AuditorRunner:
         """
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context()
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=False)
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
@@ -382,18 +378,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
@@ -414,18 +399,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
@@ -451,18 +425,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
@@ -478,18 +441,7 @@ class AuditorRunner:
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
@@ -518,18 +470,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     crawl_res = crawl_site_archetypes(
@@ -565,18 +506,7 @@ class AuditorRunner:
     def extract_palette(self, url: str) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     return extract_site_palette(page, url)
@@ -599,18 +529,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
@@ -654,17 +573,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(**launch_kwargs)
-                    context = browser.new_context()
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=False)
 
                 try:
                     s_dir = Path(screenshot_dir) if screenshot_dir else None
@@ -744,18 +653,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     report = checker.audit(page, url=url)
@@ -839,18 +737,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     js_result = JSAuditResult()
@@ -973,18 +860,7 @@ class AuditorRunner:
 
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
-                launch_kwargs: Dict[str, Any] = {"headless": self.headless, "bypass_csp": True}
-                if temp_profile:
-                    context = p.firefox.launch_persistent_context(
-                        user_data_dir=str(temp_profile),
-                        viewport={"width": 1440, "height": 900},
-                        **launch_kwargs,
-                    )
-                    page = context.new_page() if not context.pages else context.pages[0]
-                else:
-                    browser = p.firefox.launch(headless=self.headless)
-                    context = browser.new_context(viewport={"width": 1440, "height": 900}, bypass_csp=True)
-                    page = context.new_page()
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     rep = check_spa_resilience(

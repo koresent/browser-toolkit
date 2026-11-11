@@ -13,6 +13,7 @@ from .profile import ZenProfileContext
 from .parser import parse_userscript
 from .js_auditor import inject_userscript
 from .navigation import safe_goto
+from .browser_backend import safe_launch_persistent_context, safe_launch_browser
 
 
 def run_live_script_preview(
@@ -42,14 +43,15 @@ def run_live_script_preview(
         with sync_playwright() as p:
             launch_kwargs = {"headless": headless}
             if temp_profile:
-                context = p.firefox.launch_persistent_context(
+                context = safe_launch_persistent_context(
+                    p,
                     user_data_dir=str(temp_profile),
                     viewport={"width": 1440, "height": 900},
                     **launch_kwargs,
                 )
                 page = context.new_page() if not context.pages else context.pages[0]
             else:
-                browser = p.firefox.launch(**launch_kwargs)
+                browser = safe_launch_browser(p, **launch_kwargs)
                 context = browser.new_context(viewport={"width": 1440, "height": 900})
                 page = context.new_page()
 
