@@ -30,6 +30,24 @@ class TestProfileAndScanner(unittest.TestCase):
         # Must be cleaned up after exit
         self.assertFalse(temp_path.exists())
 
+    def test_zen_profile_clean_styles_preserves_cookies(self):
+        with tempfile.TemporaryDirectory() as src_dir:
+            src = Path(src_dir)
+            (src / "prefs.js").write_text("", encoding="utf-8")
+            (src / "cookies.sqlite").write_text("cookie-data", encoding="utf-8")
+            stylus_idb = src / "storage" / "default" / "moz-extension+++abc-stylus" / "idb"
+            stylus_idb.mkdir(parents=True)
+            (stylus_idb / "489858440shtsyil.sqlite").write_text("stylus", encoding="utf-8")
+            vm_idb = src / "storage" / "default" / "moz-extension+++def-vm" / "idb"
+            vm_idb.mkdir(parents=True)
+            (vm_idb / "1234vm.sqlite").write_text("vm", encoding="utf-8")
+
+            with ZenProfileContext(str(src), use_profile=True, clean_styles=True) as clone:
+                self.assertIsNotNone(clone)
+                self.assertTrue((clone / "cookies.sqlite").exists())
+                self.assertFalse((clone / "storage" / "default" / "moz-extension+++abc-stylus").exists())
+                self.assertTrue((clone / "storage" / "default" / "moz-extension+++def-vm").exists())
+
     def test_scan_directory(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

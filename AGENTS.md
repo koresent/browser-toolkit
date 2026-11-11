@@ -84,8 +84,8 @@ Compose tools dynamically according to the user's goal:
   Extracts a minimal CSS color skeleton from a stylesheet or URL, discarding layout, grid, and font rules.
 * **`test-rule <url> --css <rule> --toon`**  
   Tests candidate CSS rule impact on live page without page reload. Flags elements covering >25% viewport and saves before/after screenshots to `/tmp/browser-toolkit/rule-test/`.
-* **`check-theme <url> [--css <path>] [--theme dark|light] --toon`**  
-  Detects dark theme flaws: bright background bleedthrough, unstyled native inputs, invisible text (WCAG contrast < 1.8:1), hidden SVG icons, and missing scrollbar styling.
+* **`check-theme <url> [--css <path>] [--theme dark|light] [--exclude-colors COLORS] --toon`**  
+  Detects dark theme flaws (bright bleedthrough, unstyled inputs, invisible text, hidden SVGs, missing scrollbars) and reports dominant surface background/border colors (excluding theme palette colors) so foreign surfaces on natively-dark sites stand out immediately.
 * **`check-contrast <url> [--css <path>] --toon`**  
   Audits WCAG text contrast ratios across all visible text nodes on the styled page.
 
@@ -128,17 +128,19 @@ Direct programmatic access to browser extension state via IndexedDB:
 ### G. Browser Automation & Persistent Sessions
 * **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] [--output PATH] --toon`**: Capture viewport or element screenshot (defaults to unique timestamped file in `/tmp/browser-toolkit/screenshots/`).
 * **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (`click`, `click_text`, `hover`, `fill`, `press`, `wait`, `wait_for`, `scroll`, `scroll_into_view`, `evaluate`, `evaluate_many`, `screenshot`).
-* **`session start [url] [--name ID] [--no-profile] [--profile PATH] [--headful] --toon`**: Launches a background session daemon named `ID` (default: `'default'` or `BROWSER_TOOLKIT_SESSION` env var) maintaining an active Playwright instance, Zen profile clone, and open page over `/tmp/browser-toolkit/session_<ID>.sock`. Automatically closes after 15 minutes of inactivity.
+* **`session start [url] [--name ID] [--no-profile] [--profile PATH] [--headful] [--clean-styles] --toon`**: Launches a background session daemon named `ID` (default: `'default'` or `BROWSER_TOOLKIT_SESSION` env var) maintaining an active Playwright instance, Zen profile clone, and open page over `/tmp/browser-toolkit/session_<ID>.sock`. Pass `--clean-styles` to strip installed Stylus styles in the temporary clone while keeping logins/cookies intact. Automatically closes after 15 minutes of inactivity.
 * **`session list --toon`**: Lists all active running sessions with their identifiers, current URLs, and uptime.
 * **`session status [--name ID] --toon`**: Checks session status, current URL, page title, and uptime.
+* **`session frames [--name ID] --toon`**: Lists the main page and all child iframes (including cross-origin iframes) in the active session.
 * **`session goto <url> [--name ID] --toon`**: Navigates active session to a URL.
-* **`session eval [script] [--file PATH] [--name ID] --toon`**: Evaluates JavaScript expression (inline, `'-'` via stdin, or `--file`) in the active session page.
-* **`session eval-many <scripts_json_or_file> [--name ID] --toon`**: Evaluates a batch dictionary of JavaScript expressions in one call.
-* **`session inspect --selector <sel> [--rules] [--properties PROPS] [--actions JSON] [--css RULE_OR_FILE] [--pseudo PSEUDO] [--name ID] --toon`**: Inspects elements, computed styles, custom properties, and matching CSS rules inside the active session.
-* **`session search [--text TEXT] [--keyword KW] [--role ROLE] [--tag TAG] [--wait SEL_OR_MS] [--actions JSON] [--name ID] --toon`**: Searches DOM and synthesizes resilient selectors inside the active session.
-* **`session inject-css <css_or_file> [--name ID] --toon`**: Injects a raw CSS snippet or compiled `.user.css` style into the active session page.
+* **`session eval [script] [--file PATH] [--frame FRAME] [--name ID] --toon`**: Evaluates JavaScript expression (inline, `'-'` via stdin, or `--file`) in the active page or specified iframe.
+* **`session eval-many <scripts_json_or_file> [--frame FRAME] [--name ID] --toon`**: Evaluates a batch dictionary of JavaScript expressions in one call.
+* **`session inspect --selector <sel> [--rules] [--properties PROPS] [--actions JSON] [--css RULE_OR_FILE] [--pseudo PSEUDO] [--frame FRAME] [--name ID] --toon`**: Inspects elements, computed styles, custom properties, and matching CSS rules inside the active session (or target iframe).
+* **`session search [--text TEXT] [--keyword KW] [--role ROLE] [--tag TAG] [--wait SEL_OR_MS] [--actions JSON] [--frame FRAME] [--name ID] --toon`**: Searches DOM and synthesizes resilient selectors inside the active session (or target iframe).
+* **`session inject-css <css_or_file> [--frame FRAME] [--name ID] --toon`**: Injects a raw CSS snippet or compiled `.user.css` style into the active page or specified iframe.
+* **`session check-theme [--css <path>] [--theme dark|light] [--exclude-colors COLORS] [--frame FRAME] [--name ID] --toon`**: Runs `check-theme` inside the live session page or iframe (ideal after opening menus/popups).
 * **`session inject-script <file_or_js> [--settle-ms MS] [--name ID] --toon`**: Injects a `.user.js` UserScript or raw JavaScript file into the active session with GM polyfills.
-* **`session interact --actions <json_or_file> [--name ID] --toon`**: Executes action sequence in the active session.
+* **`session interact --actions <json_or_file> [--frame FRAME] [--name ID] --toon`**: Executes action sequence in the active session (or target iframe).
 * **`session screenshot [--selector SEL] [--output PATH] [--full-page] [--name ID] --toon`**: Captures screenshot from the active session.
 * **`session stop [--name ID] --toon`**: Cleanly shuts down daemon, context, and temp profile for session `ID`.
 

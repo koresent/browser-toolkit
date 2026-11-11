@@ -49,10 +49,13 @@ class PageInteractor:
         except Exception as e:
             raise RuntimeError(f"Failed to fill '{selector}': {e}")
 
+    def _owning_page(self) -> Any:
+        return getattr(self.page, "page", self.page)
+
     def press(self, key: str) -> bool:
         """Presses a keyboard key, e.g. 'Enter', 'Escape'."""
         try:
-            self.page.keyboard.press(key)
+            self._owning_page().keyboard.press(key)
             return True
         except Exception as e:
             raise RuntimeError(f"Failed to press key '{key}': {e}")
@@ -79,7 +82,7 @@ class PageInteractor:
                     [x, y],
                 )
             else:
-                self.page.mouse.wheel(x, y)
+                self._owning_page().mouse.wheel(x, y)
             return True
         except Exception as e:
             raise RuntimeError(f"Failed to scroll '{selector or 'page'}': {e}")
@@ -135,7 +138,7 @@ class PageInteractor:
             loc = self.page.locator(selector).first
             loc.screenshot(path=str(out))
         else:
-            self.page.screenshot(path=str(out), full_page=full_page)
+            self._owning_page().screenshot(path=str(out), full_page=full_page)
 
         return out
 

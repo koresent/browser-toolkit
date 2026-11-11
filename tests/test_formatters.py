@@ -80,23 +80,21 @@ class TestFormatters(unittest.TestCase):
         self.assertTrue(args3.toon)
 
     def test_persistent_default_format(self):
-        try:
-            if DEFAULT_FORMAT_FILE.exists():
-                DEFAULT_FORMAT_FILE.unlink()
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_cfg = Path(tmpdir) / "default_format"
+            with patch("browser_toolkit.formatters.DEFAULT_FORMAT_FILE", mock_cfg):
+                self.assertIsNone(get_default_format())
+                self.assertEqual(resolve_format(DummyArgs()), "text")
 
-            self.assertIsNone(get_default_format())
-            self.assertEqual(resolve_format(DummyArgs()), "text")
+                set_default_format("toon")
+                self.assertEqual(get_default_format(), "toon")
+                self.assertEqual(resolve_format(DummyArgs()), "toon")
 
-            set_default_format("toon")
-            self.assertEqual(get_default_format(), "toon")
-            self.assertEqual(resolve_format(DummyArgs()), "toon")
+                set_default_format("json")
+                self.assertEqual(get_default_format(), "json")
+                self.assertEqual(resolve_format(DummyArgs()), "json")
 
-            set_default_format("json")
-            self.assertEqual(get_default_format(), "json")
-            self.assertEqual(resolve_format(DummyArgs()), "json")
-
-            with self.assertRaises(ValueError):
-                set_default_format("unsupported_fmt")
-        finally:
-            if DEFAULT_FORMAT_FILE.exists():
-                DEFAULT_FORMAT_FILE.unlink()
+                with self.assertRaises(ValueError):
+                    set_default_format("unsupported_fmt")

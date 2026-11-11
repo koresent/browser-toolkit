@@ -25,7 +25,7 @@ from .preview_js import run_live_script_preview
 from .spa_checker import check_spa_resilience
 from .css_color_extractor import extract_colors_from_file_or_url
 from .responsive_checker import ResponsiveChecker
-from .theme_flaw_checker import ThemeFlawChecker
+from .theme_flaw_checker import ThemeFlawChecker, theme_report_to_dict
 from .gm_shim import GM_FULL_SHIM_JS
 from .mutation_tracker import attach_mutation_tracker, collect_dom_mutations
 from .extension_manager import ExtensionManager
@@ -39,10 +39,24 @@ from .browser_backend import (
 
 
 class AuditorRunner:
-    def __init__(self, profile_path: Optional[str] = None, use_profile: bool = True, headless: bool = True):
+    def __init__(
+        self,
+        profile_path: Optional[str] = None,
+        use_profile: bool = True,
+        headless: bool = True,
+        clean_styles: bool = False,
+    ):
         self.profile_path = profile_path
         self.use_profile = use_profile
         self.headless = headless
+        self.clean_styles = clean_styles
+
+    def _profile_context(self) -> ZenProfileContext:
+        return ZenProfileContext(
+            self.profile_path,
+            use_profile=self.use_profile,
+            clean_styles=self.clean_styles,
+        )
 
     def _launch_browser_context(
         self,
@@ -104,7 +118,7 @@ class AuditorRunner:
             "tested_pages": [],
         }
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -254,7 +268,7 @@ class AuditorRunner:
             "output_dir": str(out_path),
         }
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -328,7 +342,7 @@ class AuditorRunner:
         Inspects an element on a live page using the Zen profile,
         returning its HTML, computed styles, CSS custom properties, and matched stylesheet rules.
         """
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=False)
 
@@ -360,7 +374,7 @@ class AuditorRunner:
         wait: Optional[str] = None,
         actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -386,7 +400,7 @@ class AuditorRunner:
             shots_dir.mkdir(parents=True, exist_ok=True)
             output_path = shots_dir / f"screenshot_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.png"
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -416,7 +430,7 @@ class AuditorRunner:
         css_rule: str,
         output_dir: Optional[str | Path] = None,
     ) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -432,7 +446,7 @@ class AuditorRunner:
         url: str,
         actions: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -461,7 +475,7 @@ class AuditorRunner:
         out_path = Path(output_dir).resolve() if output_dir else default_out
         out_path.mkdir(parents=True, exist_ok=True)
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -497,7 +511,7 @@ class AuditorRunner:
                     context.close()
 
     def extract_palette(self, url: str) -> Dict[str, Any]:
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -520,7 +534,7 @@ class AuditorRunner:
             info = parse_userstyle(css_path)
             css_content = info.get_combined_css_for_url(url)
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -564,7 +578,7 @@ class AuditorRunner:
 
         checker = ResponsiveChecker(viewports=viewports, custom_css=css_content)
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=False)
 
@@ -636,71 +650,26 @@ class AuditorRunner:
         url: str,
         target_theme: str = "dark",
         css_path: Optional[str | Path] = None,
+        exclude_colors: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         css_content = None
         if css_path:
             info = parse_userstyle(css_path)
             css_content = info.get_combined_css_for_url(url)
 
-        checker = ThemeFlawChecker(target_theme=target_theme, custom_css=css_content)
+        checker = ThemeFlawChecker(
+            target_theme=target_theme,
+            custom_css=css_content,
+            exclude_colors=exclude_colors,
+        )
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
                 try:
                     report = checker.audit(page, url=url)
-                    return {
-                        "url": report.url,
-                        "theme_mode": report.theme_mode,
-                        "has_any_issues": report.has_any_issues,
-                        "has_custom_scrollbar": report.has_custom_scrollbar,
-                        "total_elements_checked": report.total_elements_checked,
-                        "bleedthrough_issues": [
-                            {
-                                "selector": b.selector,
-                                "tag_name": b.tag_name,
-                                "property_name": b.property_name,
-                                "color": b.color,
-                                "bounds": b.bounds,
-                                "text_snippet": b.text_snippet,
-                            }
-                            for b in report.bleedthrough_issues
-                        ],
-                        "invisible_text_issues": [
-                            {
-                                "selector": t.selector,
-                                "tag_name": t.tag_name,
-                                "text": t.text,
-                                "color": t.color,
-                                "bg_color": t.bg_color,
-                                "contrast_ratio": t.contrast_ratio,
-                            }
-                            for t in report.invisible_text_issues
-                        ],
-                        "unstyled_input_issues": [
-                            {
-                                "selector": u.selector,
-                                "tag_name": u.tag_name,
-                                "input_type": u.input_type,
-                                "bg_color": u.bg_color,
-                                "text_color": u.text_color,
-                                "contrast_ratio": u.contrast_ratio,
-                                "description": u.description,
-                            }
-                            for u in report.unstyled_input_issues
-                        ],
-                        "invisible_icon_issues": [
-                            {
-                                "selector": ic.selector,
-                                "tag_name": ic.tag_name,
-                                "fill_or_stroke": ic.fill_or_stroke,
-                                "parent_bg": ic.parent_bg,
-                                "contrast_ratio": ic.contrast_ratio,
-                            }
-                            for ic in report.invisible_icon_issues
-                        ],
-                    }
+                    return theme_report_to_dict(report)
                 finally:
                     context.close()
 
@@ -728,7 +697,7 @@ class AuditorRunner:
             "output_dir": str(out_path),
         }
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 
@@ -841,7 +810,7 @@ class AuditorRunner:
         i_url = initial_url or info.get_target_url()
         t_url = target_spa_url or i_url
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with self._profile_context() as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
 

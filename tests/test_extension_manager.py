@@ -107,12 +107,17 @@ class TestExtensionManager(unittest.TestCase):
             self.assertIsNotNone(new_style)
             self.assertEqual(new_style.id, res["id"])
 
-            # Update existing style
+            # Update existing style and verify Stylus Web Cache API is invalidated
+            stylus_cache = tmp_mgr.get_stylus_db_path().parent.parent / "cache"
+            stylus_cache.mkdir(parents=True, exist_ok=True)
+            (stylus_cache / "caches.sqlite").write_text("stale-cache", encoding="utf-8")
+
             test_css.write_text(
                 "/* ==UserStyle==\n@name Unit Test Gruvbox\n@version 2.0.0\n==/UserStyle== */\n@-moz-document domain(\"unit.test\") { body { color: #fbf1c7; } }"
             )
             res_up = tmp_mgr.install_or_update_style(test_css, enabled=False)
             self.assertEqual(res_up["action"], "updated")
+            self.assertFalse(stylus_cache.exists())
             updated_style = tmp_mgr.find_style("Unit Test Gruvbox")
             self.assertFalse(updated_style.enabled)
 

@@ -124,6 +124,37 @@ class TestThemeFlawChecker(unittest.TestCase):
         self.assertGreater(len(raw["unstyledInputIssues"]), 0)
         self.assertIn("bad-input", raw["unstyledInputIssues"][0]["selector"])
 
+    def test_theme_flaw_checker_dominant_surfaces_and_exclude_colors(self):
+        page = self.browser.new_page()
+        page.set_content("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { background-color: #282828; color: #ebdbb2; margin: 0; }
+            .native-dark-card { background-color: #202124; border: 1px solid #4d5156; padding: 12px; }
+            .stealth-text { color: #2a2a2a; background-color: #282828; }
+          </style>
+        </head>
+        <body>
+          <div class="native-dark-card">Foreign Material Dark surface</div>
+          <p class="stealth-text">Low contrast</p>
+        </body>
+        </html>
+        """)
+        checker = ThemeFlawChecker(
+            target_theme="dark",
+            exclude_colors=["#282828"],
+        )
+        rep = checker.audit_page(page, url="https://example.test")
+        page.close()
+
+        self.assertGreater(len(rep.invisible_text_issues), 0)
+        surface_colors = {s["color"] for s in rep.dominant_surfaces}
+        self.assertNotIn("rgb(40, 40, 40)", surface_colors)
+        self.assertIn("rgb(32, 33, 36)", surface_colors)
+        self.assertIn("rgb(77, 81, 86)", surface_colors)
+
 
 if __name__ == "__main__":
     unittest.main()

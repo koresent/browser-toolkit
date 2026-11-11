@@ -3,10 +3,27 @@ Theme flaw auditor: detects bright bleedthrough in dark themes, invisible text,
 unstyled form inputs, low-contrast SVG icons, and missing scrollbar theming.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page
 from .navigation import safe_goto
+
+
+def _extract_rgb_strings_from_css(css_text: str) -> List[str]:
+    """Extracts hex and rgb/rgba colors from CSS text normalized as 'rgb(r, g, b)'."""
+    colors: set[str] = set()
+    for hex_match in re.findall(r"#([0-9a-fA-F]{3,8})\b", css_text):
+        h = hex_match.lower()
+        if len(h) == 3:
+            r, g, b = int(h[0] * 2, 16), int(h[1] * 2, 16), int(h[2] * 2, 16)
+            colors.add(f"rgb({r}, {g}, {b})")
+        elif len(h) in (6, 8):
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            colors.add(f"rgb({r}, {g}, {b})")
+    for r_str, g_str, b_str in re.findall(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", css_text):
+        colors.add(f"rgb({int(r_str)}, {int(g_str)}, {int(b_str)})")
+    return sorted(colors)
 
 
 @dataclass
@@ -59,6 +76,7 @@ class ThemeFlawReport:
     invisible_icon_issues: List[InvisibleIconIssue] = field(default_factory=list)
     has_custom_scrollbar: bool = False
     total_elements_checked: int = 0
+    dominant_surfaces: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def has_any_issues(self) -> bool:
@@ -71,7 +89,9 @@ class ThemeFlawReport:
         )
 
 
-JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
+JS_THEME_FLAW_AUDIT = r"""(arg) => {
+    const expectedMode = typeof arg === 'string' ? arg : (arg && arg.mode ? arg.mode : 'dark');
+    const excludeSet = new Set(Array.isArray(arg && arg.excludeColors) ? arg.excludeColors : []);
     function parseRgb(rgbStr) {
         if (!rgbStr || rgbStr === 'transparent') return null;
         const m = rgbStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
@@ -143,6 +163,24 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
     const invisibleTextIssues = [];
     const unstyledInputIssues = [];
     const invisibleIconIssues = [];
+    const surfaceBuckets = {};
+
+    function recordSurface(propName, rgbObj, el) {
+        if (!rgbObj || rgbObj.a <= 0.1) return;
+        const norm = `rgb(${rgbObj.r}, ${rgbObj.g}, ${rgbObj.b})`;
+        if (excludeSet.has(norm)) return;
+        const key = `${propName}:${norm}`;
+        if (!surfaceBuckets[key]) {
+            surfaceBuckets[key] = { property: propName, color: norm, count: 0, samples: [] };
+        }
+        surfaceBuckets[key].count++;
+        if (surfaceBuckets[key].samples.length < 2) {
+            const sel = getSelector(el);
+            if (sel && !surfaceBuckets[key].samples.includes(sel)) {
+                surfaceBuckets[key].samples.push(sel);
+            }
+        }
+    }
 
     const elements = document.querySelectorAll('*');
     let checkedCount = 0;
@@ -161,6 +199,10 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
 
         // Detect bright bleedthrough in dark mode (or dark bleedthrough in light mode)
         const bgRgb = parseRgb(comp.backgroundColor);
+        recordSurface('background-color', bgRgb, el);
+        if (comp.borderTopWidth !== '0px' && comp.borderTopStyle !== 'none') {
+            recordSurface('border-color', parseRgb(comp.borderTopColor), el);
+        }
         if (bgRgb && bgRgb.a > 0.6) {
             const lum = getLuminance(bgRgb);
             // In dark mode, background luminance > 0.5 is jarring bleedthrough
@@ -267,13 +309,17 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
         if (bleedthroughIssues.length >= 20 && invisibleTextIssues.length >= 20) break;
     }
 
-    // Check for scrollbar-color property on root
-    const rootStyle = window.getComputedStyle(document.documentElement);
+    // Check for scrollbar-color property on root (frames fall back cleanly if documentElement is missing).
+    const rootStyle = document.documentElement ? window.getComputedStyle(document.documentElement) : null;
     const bodyStyle = document.body ? window.getComputedStyle(document.body) : null;
     const hasCustomScrollbar = (
-        (rootStyle.scrollbarColor && rootStyle.scrollbarColor !== 'auto') ||
+        (rootStyle && rootStyle.scrollbarColor && rootStyle.scrollbarColor !== 'auto') ||
         (bodyStyle && bodyStyle.scrollbarColor && bodyStyle.scrollbarColor !== 'auto')
     );
+
+    const dominantSurfaces = Object.values(surfaceBuckets)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 12);
 
     return {
         totalChecked: checkedCount,
@@ -281,7 +327,8 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
         bleedthroughIssues: bleedthroughIssues.slice(0, 15),
         invisibleTextIssues: invisibleTextIssues.slice(0, 15),
         unstyledInputIssues: unstyledInputIssues.slice(0, 10),
-        invisibleIconIssues: invisibleIconIssues.slice(0, 10)
+        invisibleIconIssues: invisibleIconIssues.slice(0, 10),
+        dominantSurfaces: dominantSurfaces
     };
 };
 """
@@ -289,31 +336,35 @@ JS_THEME_FLAW_AUDIT = r"""(expectedMode) => {
 
 class ThemeFlawChecker:
     """Audits page for visual flaws: bright bleedthrough in dark mode,
-
-    invisible text, unstyled inputs, and hidden icons.
+    invisible text, unstyled inputs, hidden icons, and unstyled surface colors.
     """
 
-    def __init__(self, target_theme: str = "dark", custom_css: Optional[str] = None):
+    def __init__(
+        self,
+        target_theme: str = "dark",
+        custom_css: Optional[str] = None,
+        exclude_colors: Optional[List[str]] = None,
+    ):
         self.target_theme = target_theme
         self.custom_css = custom_css
+        self.exclude_colors = exclude_colors
 
-    def audit(
-        self,
-        page: Page,
-        url: str,
-        wait_network_idle: bool = True,
-    ) -> ThemeFlawReport:
-        """Navigates to URL, applies custom CSS if provided, and audits for theme flaws."""
-        if wait_network_idle:
-            safe_goto(page, url, wait_until="networkidle", timeout=30000)
-        else:
-            safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
-
+    def audit_page(self, page: Any, url: Optional[str] = None) -> ThemeFlawReport:
+        """Audits the currently loaded Page or Frame without navigating."""
         if self.custom_css:
             page.add_style_tag(content=self.custom_css)
             page.wait_for_timeout(200)
 
-        raw = page.evaluate(JS_THEME_FLAW_AUDIT, self.target_theme)
+        exclude_list: List[str] = []
+        if self.exclude_colors:
+            exclude_list = _extract_rgb_strings_from_css(" ".join(self.exclude_colors))
+        elif self.custom_css:
+            exclude_list = _extract_rgb_strings_from_css(self.custom_css)
+
+        raw = page.evaluate(
+            JS_THEME_FLAW_AUDIT,
+            {"mode": self.target_theme, "excludeColors": exclude_list},
+        )
 
         bleedthrough = [
             BrightBleedthroughIssue(
@@ -333,8 +384,8 @@ class ThemeFlawChecker:
                 tag_name=item["tagName"],
                 text=item["text"],
                 color=item["color"],
-                bgColor=item["bgColor"],
-                contrastRatio=item["contrastRatio"],
+                bg_color=item["bgColor"],
+                contrast_ratio=item["contrastRatio"],
             )
             for item in raw.get("invisibleTextIssues", [])
         ]
@@ -364,7 +415,7 @@ class ThemeFlawChecker:
         ]
 
         return ThemeFlawReport(
-            url=url,
+            url=url or getattr(page, "url", ""),
             theme_mode=self.target_theme,
             bleedthrough_issues=bleedthrough,
             invisible_text_issues=invisible_text,
@@ -372,4 +423,75 @@ class ThemeFlawChecker:
             invisible_icon_issues=invisible_icons,
             has_custom_scrollbar=raw.get("hasCustomScrollbar", False),
             total_elements_checked=raw.get("totalChecked", 0),
+            dominant_surfaces=raw.get("dominantSurfaces", []),
         )
+
+    def audit(
+        self,
+        page: Page,
+        url: str,
+        wait_network_idle: bool = True,
+    ) -> ThemeFlawReport:
+        """Navigates to URL, applies custom CSS if provided, and audits for theme flaws."""
+        if wait_network_idle:
+            safe_goto(page, url, wait_until="networkidle", timeout=30000)
+        else:
+            safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
+
+        return self.audit_page(page, url=url)
+
+
+def theme_report_to_dict(report: ThemeFlawReport) -> Dict[str, Any]:
+    """Serializes ThemeFlawReport into a compact dictionary for CLI/TOON output."""
+    return {
+        "url": report.url,
+        "theme_mode": report.theme_mode,
+        "has_any_issues": report.has_any_issues,
+        "has_custom_scrollbar": report.has_custom_scrollbar,
+        "total_elements_checked": report.total_elements_checked,
+        "bleedthrough_issues": [
+            {
+                "selector": b.selector,
+                "tag_name": b.tag_name,
+                "property_name": b.property_name,
+                "color": b.color,
+                "bounds": b.bounds,
+                "text_snippet": b.text_snippet,
+            }
+            for b in report.bleedthrough_issues
+        ],
+        "invisible_text_issues": [
+            {
+                "selector": t.selector,
+                "tag_name": t.tag_name,
+                "text": t.text,
+                "color": t.color,
+                "bg_color": t.bg_color,
+                "contrast_ratio": t.contrast_ratio,
+            }
+            for t in report.invisible_text_issues
+        ],
+        "unstyled_input_issues": [
+            {
+                "selector": u.selector,
+                "tag_name": u.tag_name,
+                "input_type": u.input_type,
+                "bg_color": u.bg_color,
+                "text_color": u.text_color,
+                "contrast_ratio": u.contrast_ratio,
+                "description": u.description,
+            }
+            for u in report.unstyled_input_issues
+        ],
+        "invisible_icon_issues": [
+            {
+                "selector": ic.selector,
+                "tag_name": ic.tag_name,
+                "fill_or_stroke": ic.fill_or_stroke,
+                "parent_bg": ic.parent_bg,
+                "contrast_ratio": ic.contrast_ratio,
+            }
+            for ic in report.invisible_icon_issues
+        ],
+        "dominant_surfaces": report.dominant_surfaces,
+    }

@@ -187,6 +187,26 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args_inj_js.file, "script.user.js")
         self.assertEqual(args_inj_js.settle_ms, 200)
 
+        args_frames = self.parser.parse_args(["session", "frames", "--name", "gg"])
+        self.assertEqual(args_frames.session_command, "frames")
+        self.assertEqual(args_frames.name, "gg")
+
+        args_s_clean = self.parser.parse_args(["session", "start", "https://www.google.com", "--clean-styles", "--name", "gg"])
+        self.assertEqual(args_s_clean.session_command, "start")
+        self.assertTrue(args_s_clean.clean_styles)
+
+        args_frame_eval = self.parser.parse_args(["session", "eval", "document.title", "--frame", "account"])
+        self.assertEqual(args_frame_eval.frame, "account")
+
+        args_s_theme = self.parser.parse_args(["session", "check-theme", "--theme", "dark", "--exclude-colors", "#282828,#3c3836", "--frame", "account"])
+        self.assertEqual(args_s_theme.session_command, "check-theme")
+        self.assertEqual(args_s_theme.exclude_colors, "#282828,#3c3836")
+        self.assertEqual(args_s_theme.frame, "account")
+
+        args_theme_clean = self.parser.parse_args(["check-theme", "https://www.google.com", "--clean-styles", "--exclude-colors", "#282828"])
+        self.assertTrue(args_theme_clean.clean_styles)
+        self.assertEqual(args_theme_clean.exclude_colors, "#282828")
+
     def test_profile_info_args(self):
         args = self.parser.parse_args(["profile-info", "--toon"])
         self.assertEqual(args.command, "profile-info")

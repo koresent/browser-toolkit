@@ -328,6 +328,13 @@ def print_theme_flaws_summary(report: Dict[str, Any]) -> None:
         for ic in icons[:5]:
             print(f"  • {ic['selector']} ({ic['fill_or_stroke']} against {ic['parent_bg']}, ratio: {ic['contrast_ratio']}:1)")
 
+    surfaces = report.get("dominant_surfaces", [])
+    if surfaces:
+        print(f"Dominant Surface Colors ({len(surfaces)}):")
+        for s in surfaces[:8]:
+            samples = ", ".join(s.get("samples", []))
+            print(f"  • {s['property']}: {s['color']} ({s['count']}x) [{samples}]")
+
     scrollbar_str = "Custom scrollbar applied" if has_scrollbar else "Native default scrollbars (consider adding scrollbar-color: #504945 #282828)"
     print(f"Scrollbar: {scrollbar_str}")
 
@@ -517,6 +524,14 @@ def add_output_args(p: argparse.ArgumentParser, is_root: bool = False) -> None:
     p.add_argument("--json", action="store_true", default=default_flag, help="Output result as compact JSON")
     p.add_argument("--format", choices=["text", "json", "json-pretty", "toon"], default=default_format, help="Explicit output format")
 
+def add_profile_args(p: argparse.ArgumentParser, with_clean_styles: bool = True) -> None:
+    p.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    p.add_argument("--profile", help="Path to custom profile directory")
+    p.add_argument("--headful", action="store_true", help="Run with visible window")
+    if with_clean_styles:
+        p.add_argument("--clean-styles", action="store_true", help="Strip Stylus storage in temporary profile clone while keeping cookies")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="browser-toolkit",
@@ -532,9 +547,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser.add_argument("--urls", help="Comma-separated list of multiple URLs to audit across")
     audit_parser.add_argument("--sample-pages", type=int, default=2, help="Number of representative subpages to auto-discover and test (default: 2)")
     audit_parser.add_argument("--deep-hunt", action="store_true", help="Crawl site for unique DOM archetypes until 100% selectors are satisfied or limit reached")
-    audit_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile (run clean)")
-    audit_parser.add_argument("--profile", help="Path to custom profile directory")
-    audit_parser.add_argument("--headful", action="store_true", help="Run with visible browser window")
+    add_profile_args(audit_parser)
     audit_parser.add_argument("--output", help="Directory to save screenshots and report")
     add_output_args(audit_parser)
 
@@ -577,9 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     rule_parser.add_argument("url", help="Target URL")
     rule_parser.add_argument("--css", required=True, help="CSS rule to test, e.g. '.foo { display: none; }'")
     rule_parser.add_argument("--output", help="Output directory for before/after screenshots")
-    rule_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    rule_parser.add_argument("--profile", help="Path to custom profile")
-    rule_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_profile_args(rule_parser)
     add_output_args(rule_parser)
 
     # Command: screenshot
@@ -590,27 +601,21 @@ def build_parser() -> argparse.ArgumentParser:
     shot_parser.add_argument("--hover", help="Hover over selector before screenshot")
     shot_parser.add_argument("--wait", help="Wait for selector or millisecond timeout before screenshot")
     shot_parser.add_argument("--full-page", action="store_true", help="Capture full page height")
-    shot_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    shot_parser.add_argument("--profile", help="Path to custom profile")
-    shot_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_profile_args(shot_parser)
     add_output_args(shot_parser)
 
     # Command: interact
     interact_parser = subparsers.add_parser("interact", help="Perform sequence of user actions (click, hover, fill)")
     interact_parser.add_argument("url", help="Target URL")
     interact_parser.add_argument("--actions", required=True, help="JSON string or file path containing list of actions")
-    interact_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    interact_parser.add_argument("--profile", help="Path to custom profile")
-    interact_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_profile_args(interact_parser)
     add_output_args(interact_parser)
 
     # Command: inspect
     inspect_parser = subparsers.add_parser("inspect", help="Inspect element computed styles, custom properties, and CSS rules on a live URL")
     inspect_parser.add_argument("url", help="Target URL to open")
     add_inspect_args(inspect_parser)
-    inspect_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    inspect_parser.add_argument("--profile", help="Path to custom profile")
-    inspect_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_profile_args(inspect_parser)
     add_output_args(inspect_parser)
 
     # Command: map-site
@@ -670,14 +675,16 @@ def build_parser() -> argparse.ArgumentParser:
     resp_parser.add_argument("--headful", action="store_true", help="Run with visible window")
     add_output_args(resp_parser)
 
+    def add_theme_check_args(p: argparse.ArgumentParser) -> None:
+        p.add_argument("--css", help="Optional path to .user.css or CSS string to apply before testing")
+        p.add_argument("--theme", choices=["dark", "light"], default="dark", help="Expected theme palette mode (default: dark)")
+        p.add_argument("--exclude-colors", help="Comma-separated palette colors (e.g. '#282828,#3c3836') to exclude from dominant surface report")
+
     # Command: check-theme
     theme_parser = subparsers.add_parser("check-theme", help="Audit theme flaws (bright bleedthrough, invisible text, unstyled inputs, hidden SVGs)")
     theme_parser.add_argument("url", help="Target URL")
-    theme_parser.add_argument("--css", help="Optional path to .user.css to apply before testing")
-    theme_parser.add_argument("--theme", choices=["dark", "light"], default="dark", help="Expected theme palette mode (default: dark)")
-    theme_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    theme_parser.add_argument("--profile", help="Path to custom profile")
-    theme_parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_theme_check_args(theme_parser)
+    add_profile_args(theme_parser)
     add_output_args(theme_parser)
 
     # Command: test-script
@@ -858,16 +865,17 @@ def build_parser() -> argparse.ArgumentParser:
     def add_session_name_arg(sub_p: argparse.ArgumentParser) -> None:
         sub_p.add_argument("--name", "--session", help="Session identifier (default: 'default' or BROWSER_TOOLKIT_SESSION env var)")
 
+    def add_frame_arg(sub_p: argparse.ArgumentParser) -> None:
+        sub_p.add_argument("--frame", help="Target child iframe by name or URL substring (e.g. 'account' or 'ogs.google.com')")
+
     # session list
     s_list = session_sub.add_parser("list", help="List all running browser sessions")
     add_output_args(s_list)
 
-    # session start [url] [--name NAME] [--no-profile] [--profile PATH] [--headful]
+    # session start [url] [--name NAME] [--no-profile] [--profile PATH] [--headful] [--clean-styles]
     s_start = session_sub.add_parser("start", help="Start background session daemon or navigate to URL")
     s_start.add_argument("url", nargs="?", help="Initial URL to navigate")
-    s_start.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
-    s_start.add_argument("--profile", help="Path to custom profile")
-    s_start.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_profile_args(s_start)
     add_session_name_arg(s_start)
     add_output_args(s_start)
 
@@ -876,42 +884,59 @@ def build_parser() -> argparse.ArgumentParser:
     add_session_name_arg(s_status)
     add_output_args(s_status)
 
+    # session frames [--name NAME]
+    s_frames = session_sub.add_parser("frames", help="List all page and iframe targets in active session")
+    add_session_name_arg(s_frames)
+    add_output_args(s_frames)
+
     # session goto <url> [--name NAME]
     s_goto = session_sub.add_parser("goto", help="Navigate active session to a URL")
     s_goto.add_argument("url", help="Target URL")
     add_session_name_arg(s_goto)
     add_output_args(s_goto)
 
-    # session eval [script] [--file PATH] [--name NAME]
+    # session eval [script] [--file PATH] [--frame FRAME] [--name NAME]
     s_eval = session_sub.add_parser("eval", help="Evaluate JavaScript expression in active session")
     s_eval.add_argument("script", nargs="?", help="JavaScript code to evaluate (or '-' to read from stdin)")
     s_eval.add_argument("--file", "-f", help="Path to JavaScript file to evaluate")
+    add_frame_arg(s_eval)
     add_session_name_arg(s_eval)
     add_output_args(s_eval)
 
-    # session eval-many <scripts> [--name NAME]
+    # session eval-many <scripts> [--frame FRAME] [--name NAME]
     s_eval_many = session_sub.add_parser("eval-many", help="Evaluate batch of JavaScript expressions")
     s_eval_many.add_argument("scripts", help="JSON dictionary of scripts or path to JSON file")
+    add_frame_arg(s_eval_many)
     add_session_name_arg(s_eval_many)
     add_output_args(s_eval_many)
 
-    # session inspect --selector SEL [...] [--name NAME]
+    # session inspect --selector SEL [...] [--frame FRAME] [--name NAME]
     s_inspect = session_sub.add_parser("inspect", help="Inspect elements, computed styles, and CSS rules in active session")
     add_inspect_args(s_inspect)
+    add_frame_arg(s_inspect)
     add_session_name_arg(s_inspect)
     add_output_args(s_inspect)
 
-    # session search [...] [--name NAME]
+    # session search [...] [--frame FRAME] [--name NAME]
     s_search = session_sub.add_parser("search", help="Search DOM and synthesize selectors in active session")
     add_search_args(s_search)
+    add_frame_arg(s_search)
     add_session_name_arg(s_search)
     add_output_args(s_search)
 
-    # session inject-css <css_or_file> [--name NAME]
+    # session inject-css <css_or_file> [--frame FRAME] [--name NAME]
     s_inj_css = session_sub.add_parser("inject-css", help="Inject CSS string or .user.css file into active session")
     s_inj_css.add_argument("css", help="CSS code or path to .css/.user.css file")
+    add_frame_arg(s_inj_css)
     add_session_name_arg(s_inj_css)
     add_output_args(s_inj_css)
+
+    # session check-theme [...] [--frame FRAME] [--name NAME]
+    s_check_theme = session_sub.add_parser("check-theme", help="Audit theme flaws and dominant surface colors inside active session")
+    add_theme_check_args(s_check_theme)
+    add_frame_arg(s_check_theme)
+    add_session_name_arg(s_check_theme)
+    add_output_args(s_check_theme)
 
     # session inject-script <file_or_js> [--settle-ms MS] [--name NAME]
     s_inj_js = session_sub.add_parser("inject-script", help="Inject .user.js or JavaScript file into active session with GM polyfills")
@@ -920,9 +945,10 @@ def build_parser() -> argparse.ArgumentParser:
     add_session_name_arg(s_inj_js)
     add_output_args(s_inj_js)
 
-    # session interact --actions <json_or_file> [--name NAME]
+    # session interact --actions <json_or_file> [--frame FRAME] [--name NAME]
     s_interact = session_sub.add_parser("interact", help="Perform sequence of user actions in active session")
     s_interact.add_argument("--actions", required=True, help="JSON list of actions or path to JSON file")
+    add_frame_arg(s_interact)
     add_session_name_arg(s_interact)
     add_output_args(s_interact)
 
@@ -1008,11 +1034,27 @@ def main() -> None:
                 profile_path=getattr(args, "profile", None),
                 no_profile=getattr(args, "no_profile", False),
                 headful=getattr(args, "headful", False),
+                clean_styles=getattr(args, "clean_styles", False),
             )
             output_result(
                 res,
                 args,
                 lambda d: print(f"Session '{d.get('session_name', 'default')}' active: URL={d.get('url')} Title='{d.get('title')}'"),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "frames":
+            res = send_session_command({"action": "frames"}, session_name=session_name)
+            output_result(
+                res,
+                args,
+                lambda d: print(
+                    f"Frames ({d.get('frames_count', 0)}):\n"
+                    + "\n".join(
+                        f"  [{f['index']}] name='{f['name']}' url={f['url']}" + (" (main)" if f.get("is_main") else "")
+                        for f in d.get("frames", [])
+                    )
+                ),
             )
             sys.exit(0 if res.get("status") == "ok" else 1)
 
@@ -1047,7 +1089,11 @@ def main() -> None:
             elif not script_code:
                 sys.stderr.write("Error: Provide a JavaScript expression, '-' for stdin, or '--file <path>'.\n")
                 sys.exit(2)
-            res = send_session_command({"action": "eval", "script": script_code}, session_name=session_name)
+            res = send_session_command({
+                "action": "eval",
+                "script": script_code,
+                "frame": getattr(args, "frame", None),
+            }, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -1060,7 +1106,11 @@ def main() -> None:
             if Path(script_raw).is_file():
                 script_raw = Path(script_raw).read_text(encoding="utf-8")
             scripts = json.loads(script_raw)
-            res = send_session_command({"action": "eval_many", "scripts": scripts}, session_name=session_name)
+            res = send_session_command({
+                "action": "eval_many",
+                "scripts": scripts,
+                "frame": getattr(args, "frame", None),
+            }, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -1080,6 +1130,7 @@ def main() -> None:
                 "rules": args.rules,
                 "css": css_val,
                 "pseudo": args.pseudo,
+                "frame": getattr(args, "frame", None),
             }, session_name=session_name)
             output_result(res, args, print_inspect_summary)
             sys.exit(0 if res.get("status") == "ok" else 1)
@@ -1094,6 +1145,7 @@ def main() -> None:
                 "tag": args.tag,
                 "wait": args.wait,
                 "actions": actions_list,
+                "frame": getattr(args, "frame", None),
             }, session_name=session_name)
             output_result(res, args, print_search_results)
             sys.exit(0 if res.get("status") == "ok" else 1)
@@ -1102,8 +1154,27 @@ def main() -> None:
             css_arg = args.css
             if Path(css_arg).is_file():
                 css_arg = str(Path(css_arg).resolve())
-            res = send_session_command({"action": "inject_css", "css": css_arg}, session_name=session_name)
+            res = send_session_command({
+                "action": "inject_css",
+                "css": css_arg,
+                "frame": getattr(args, "frame", None),
+            }, session_name=session_name)
             output_result(res, args, lambda d: print(f"CSS injected into session '{d.get('session_name')}'"))
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "check-theme":
+            css_arg = getattr(args, "css", None)
+            if css_arg and Path(css_arg).is_file():
+                css_arg = str(Path(css_arg).resolve())
+            excl = [c.strip() for c in args.exclude_colors.split(",") if c.strip()] if getattr(args, "exclude_colors", None) else None
+            res = send_session_command({
+                "action": "check_theme",
+                "theme": args.theme,
+                "css": css_arg,
+                "exclude_colors": excl,
+                "frame": getattr(args, "frame", None),
+            }, session_name=session_name)
+            output_result(res, args, print_theme_flaws_summary)
             sys.exit(0 if res.get("status") == "ok" else 1)
 
         elif session_cmd == "inject-script":
@@ -1123,7 +1194,11 @@ def main() -> None:
 
         elif session_cmd == "interact":
             actions_list = parse_actions_arg(args.actions) or []
-            res = send_session_command({"action": "interact", "actions": actions_list}, session_name=session_name)
+            res = send_session_command({
+                "action": "interact",
+                "actions": actions_list,
+                "frame": getattr(args, "frame", None),
+            }, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -1158,6 +1233,7 @@ def main() -> None:
         profile_path=getattr(args, "profile", None),
         use_profile=not getattr(args, "no_profile", False),
         headless=not getattr(args, "headful", False),
+        clean_styles=getattr(args, "clean_styles", False),
     )
 
     if args.command == "audit":
@@ -1304,10 +1380,12 @@ def main() -> None:
         output_result(data, args, print_responsive_summary)
 
     elif args.command == "check-theme":
+        excl = [c.strip() for c in args.exclude_colors.split(",") if c.strip()] if getattr(args, "exclude_colors", None) else None
         data = runner.check_theme(
             url=args.url,
             target_theme=getattr(args, "theme", "dark"),
             css_path=getattr(args, "css", None),
+            exclude_colors=excl,
         )
         output_result(data, args, print_theme_flaws_summary)
 

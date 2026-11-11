@@ -84,6 +84,7 @@ def start_session(
     profile_path: Optional[str] = None,
     no_profile: bool = False,
     headful: bool = False,
+    clean_styles: bool = False,
     wait_timeout: float = 20.0,
 ) -> Dict[str, Any]:
     """Starts session daemon if not running, or navigates existing session."""
@@ -110,6 +111,8 @@ def start_session(
         cmd.append("--no-profile")
     if headful:
         cmd.append("--headful")
+    if clean_styles:
+        cmd.append("--clean-styles")
 
     sock_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.Popen(

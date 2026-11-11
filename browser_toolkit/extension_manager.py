@@ -7,6 +7,7 @@ from the user's Zen profile storage databases.
 import fcntl
 import json
 import re
+import shutil
 import sqlite3
 import struct
 import tempfile
@@ -229,6 +230,13 @@ class ExtensionManager:
         conn = sqlite3.connect(db_path, timeout=10.0)
         conn.create_function("update_refcount", 2, lambda old, new: None)
         return conn
+
+    @staticmethod
+    def _invalidate_stylus_cache(db_path: Path) -> None:
+        """Removes Stylus Web Cache API data so updated IndexedDB styles recompile instead of serving stale CSS."""
+        cache_dir = db_path.parent.parent / "cache"
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir, ignore_errors=True)
 
     def __init__(self, profile_path: Optional[str | Path] = None):
         self.profile_dir = Path(profile_path).resolve() if profile_path else find_zen_profile()
@@ -644,6 +652,7 @@ class ExtensionManager:
 
             conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (new_data, key))
             conn.commit()
+            self._invalidate_stylus_cache(db_path)
             return True
         finally:
             conn.close()
@@ -671,6 +680,7 @@ class ExtensionManager:
         try:
             conn.execute("DELETE FROM object_data WHERE key = ?", (key,))
             conn.commit()
+            self._invalidate_stylus_cache(db_path)
             return True
         finally:
             conn.close()
@@ -731,6 +741,7 @@ class ExtensionManager:
                 new_data = GeckoStructuredCloneEncoder.encode(record_dict)
                 conn.execute("UPDATE object_data SET data = ? WHERE key = ?", (new_data, key))
                 conn.commit()
+                self._invalidate_stylus_cache(db_path)
                 return {"id": style_id, "name": name, "action": "updated", "enabled": enabled}
             else:
                 row = conn.execute("SELECT auto_increment FROM object_store WHERE id = 1").fetchone()
@@ -771,6 +782,7 @@ class ExtensionManager:
                     (key, new_data),
                 )
                 conn.commit()
+                self._invalidate_stylus_cache(db_path)
                 return {"id": new_id, "name": name, "action": "created", "enabled": enabled}
         finally:
             conn.close()

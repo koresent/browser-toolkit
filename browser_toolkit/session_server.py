@@ -21,6 +21,7 @@ from .navigation import safe_goto
 from .parser import parse_userscript
 from .profile import ZenProfileContext
 from .search import search_dom
+from .theme_flaw_checker import ThemeFlawChecker, theme_report_to_dict
 
 DEFAULT_IDLE_TIMEOUT = 900.0  # 15 minutes
 
@@ -46,6 +47,7 @@ class SessionServer:
         profile_path: Optional[str] = None,
         use_profile: bool = True,
         headless: bool = True,
+        clean_styles: bool = False,
         idle_timeout: float = DEFAULT_IDLE_TIMEOUT,
     ):
         self.session_name = (session_name or "default").strip()
@@ -54,6 +56,7 @@ class SessionServer:
         self.profile_path = profile_path
         self.use_profile = use_profile
         self.headless = headless
+        self.clean_styles = clean_styles
         self.idle_timeout = idle_timeout
         self.start_time = time.time()
         self.last_activity = time.time()
@@ -83,7 +86,11 @@ class SessionServer:
         signal.signal(signal.SIGTERM, handle_signal)
         signal.signal(signal.SIGINT, handle_signal)
 
-        with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
+        with ZenProfileContext(
+            self.profile_path,
+            use_profile=self.use_profile,
+            clean_styles=self.clean_styles,
+        ) as temp_profile:
             with sync_playwright() as p:
                 vp = {"width": 1440, "height": 900}
                 if temp_profile:
@@ -162,6 +169,24 @@ class SessionServer:
             except OSError:
                 pass
 
+    @staticmethod
+    def _resolve_target_frame(page: Any, frame_query: Optional[str]) -> Any:
+        """Resolves a Page or specific child Frame (including cross-origin iframes) by name or URL substring."""
+        if not frame_query:
+            return page
+        q = frame_query.strip()
+        if not q:
+            return page
+        frames = list(page.frames)
+        for fr in frames:
+            if (fr.name or "") == q:
+                return fr
+        q_low = q.lower()
+        for fr in frames:
+            if q_low in (fr.name or "").lower() or q_low in (fr.url or "").lower():
+                return fr
+        raise ValueError(f"Frame matching '{frame_query}' not found")
+
     def _process_command(
         self,
         action: str,
@@ -171,6 +196,23 @@ class SessionServer:
     ) -> Dict[str, Any]:
         if action == "ping":
             return {"status": "ok", "message": "pong", "session_name": self.session_name}
+
+        if action == "frames":
+            frames_info = [
+                {
+                    "index": idx,
+                    "name": fr.name or "",
+                    "url": fr.url,
+                    "is_main": fr == page.main_frame,
+                }
+                for idx, fr in enumerate(page.frames)
+            ]
+            return {
+                "status": "ok",
+                "session_name": self.session_name,
+                "frames_count": len(frames_info),
+                "frames": frames_info,
+            }
 
         if action == "status":
             now = time.time()
@@ -195,21 +237,24 @@ class SessionServer:
                 "title": page.title(),
             }
 
+        target = self._resolve_target_frame(page, req.get("frame"))
+        target_url = getattr(target, "url", page.url)
+
         if action == "eval":
             script = req.get("script", "")
-            interactor = PageInteractor(page)
+            interactor = PageInteractor(target)
             res = interactor.evaluate(script)
             return {"status": "ok", "session_name": self.session_name, "result": res}
 
         if action == "eval_many":
             scripts = req.get("scripts", {})
-            interactor = PageInteractor(page)
+            interactor = PageInteractor(target)
             res = interactor.evaluate_many(scripts)
             return {"status": "ok", "session_name": self.session_name, "results": res}
 
         if action == "interact":
             actions = req.get("actions", [])
-            results = execute_action_sequence(page, actions)
+            results = execute_action_sequence(target, actions)
             return {"status": "ok", "session_name": self.session_name, "results": results}
 
         if action == "inspect":
@@ -217,26 +262,26 @@ class SessionServer:
             if not selector:
                 return {"status": "error", "message": "Missing 'selector' parameter"}
             data = inspect_page_selector(
-                page,
+                target,
                 selector=selector,
                 actions=req.get("actions"),
                 properties=req.get("properties"),
                 include_rules=bool(req.get("rules", False)),
                 css=req.get("css"),
                 pseudo=req.get("pseudo"),
-                target_url=page.url,
+                target_url=target_url,
             )
             return {
                 "status": "ok",
                 "session_name": self.session_name,
-                "url": page.url,
+                "url": target_url,
                 "selector": selector,
                 "result": data,
             }
 
         if action == "search":
             results = search_dom(
-                page,
+                target,
                 text=req.get("text"),
                 keyword=req.get("keyword"),
                 role=req.get("role"),
@@ -247,7 +292,7 @@ class SessionServer:
             return {
                 "status": "ok",
                 "session_name": self.session_name,
-                "url": page.url,
+                "url": target_url,
                 "matches_count": len(results),
                 "matches": results,
             }
@@ -256,12 +301,33 @@ class SessionServer:
             css_arg = req.get("css", "")
             if not css_arg:
                 return {"status": "error", "message": "Missing 'css' parameter"}
-            inject_css_or_file(page, css_arg, target_url=page.url)
+            inject_css_or_file(target, css_arg, target_url=target_url)
             return {
                 "status": "ok",
                 "session_name": self.session_name,
-                "url": page.url,
+                "url": target_url,
             }
+
+        if action == "check_theme":
+            css_arg = req.get("css")
+            css_content = None
+            if css_arg:
+                p_css = Path(css_arg)
+                if p_css.is_file():
+                    from .parser import parse_userstyle
+                    css_content = parse_userstyle(p_css).get_combined_css_for_url(target_url)
+                else:
+                    css_content = css_arg
+            checker = ThemeFlawChecker(
+                target_theme=req.get("theme", "dark"),
+                custom_css=css_content,
+                exclude_colors=req.get("exclude_colors"),
+            )
+            report = checker.audit_page(target, url=target_url)
+            out = theme_report_to_dict(report)
+            out["status"] = "ok"
+            out["session_name"] = self.session_name
+            return out
 
         if action == "inject_script":
             raw_js = req.get("raw_js")
@@ -314,6 +380,7 @@ def main() -> None:
     parser.add_argument("--profile", help="Path to custom profile")
     parser.add_argument("--no-profile", action="store_true", help="Do not use profile clone")
     parser.add_argument("--headful", action="store_true", help="Run with visible window")
+    parser.add_argument("--clean-styles", action="store_true", help="Strip Stylus database in temporary profile clone while preserving cookies")
     parser.add_argument("--timeout", type=float, default=DEFAULT_IDLE_TIMEOUT, help="Idle timeout seconds")
     args = parser.parse_args()
 
@@ -322,6 +389,7 @@ def main() -> None:
         profile_path=args.profile,
         use_profile=not args.no_profile,
         headless=not args.headful,
+        clean_styles=args.clean_styles,
         idle_timeout=args.timeout,
     )
     server.run(initial_url=args.url)

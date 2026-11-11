@@ -69,9 +69,15 @@ class ZenProfileContext:
     removes lock and session files, and cleans up the temporary directory on exit.
     """
 
-    def __init__(self, profile_path: Optional[str] = None, use_profile: bool = True):
+    def __init__(
+        self,
+        profile_path: Optional[str] = None,
+        use_profile: bool = True,
+        clean_styles: bool = False,
+    ):
         self.profile_path = profile_path
         self.use_profile = use_profile
+        self.clean_styles = clean_styles
         self.temp_dir: Optional[str] = None
         self.cloned_profile_path: Optional[Path] = None
 
@@ -132,6 +138,14 @@ class ZenProfileContext:
                     shutil.rmtree(backup_dir, ignore_errors=True)
                 except OSError:
                     pass
+
+        # Strip Stylus storage in the temporary clone so candidate CSS can be tested without conflicts.
+        if self.clean_styles:
+            storage_default = profile_dir / "storage" / "default"
+            if storage_default.exists():
+                for db_file in storage_default.glob("moz-extension+++*/idb/*shtsyil.sqlite"):
+                    ext_storage = db_file.parent.parent
+                    shutil.rmtree(ext_storage, ignore_errors=True)
 
         # Inject preferences to disable crash popups, default browser checks, etc.
         user_js = profile_dir / "user.js"

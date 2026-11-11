@@ -78,6 +78,55 @@ class TestSessionLifecycle(unittest.TestCase):
         self.assertEqual(search_res.get("status"), "ok")
         self.assertGreaterEqual(search_res.get("matches_count", 0), 1)
 
+        # Create a child iframe with name='widget' and test frame listing + targeted frame actions
+        send_session_command({
+            "action": "eval",
+            "script": """
+            (() => {
+                const fr = document.createElement('iframe');
+                fr.name = 'widget';
+                fr.srcdoc = '<!DOCTYPE html><html><body style="background:#ffffff"><div id="inner-card" style="background:#202124;color:#ebdbb2">Widget Frame</div></body></html>';
+                document.body.appendChild(fr);
+                return true;
+            })()
+            """,
+        }, session_name="default")
+        send_session_command({
+            "action": "interact",
+            "actions": [{"action": "wait", "ms": 200}],
+        }, session_name="default")
+
+        frames_res = send_session_command({"action": "frames"}, session_name="default")
+        self.assertEqual(frames_res.get("status"), "ok")
+        frame_names = [f.get("name") for f in frames_res.get("frames", [])]
+        self.assertIn("widget", frame_names)
+
+        frame_eval = send_session_command({
+            "action": "eval",
+            "frame": "widget",
+            "script": "document.getElementById('inner-card').textContent",
+        }, session_name="default")
+        self.assertEqual(frame_eval.get("status"), "ok")
+        self.assertEqual(frame_eval.get("result"), "Widget Frame")
+
+        frame_inspect = send_session_command({
+            "action": "inspect",
+            "frame": "widget",
+            "selector": "#inner-card",
+        }, session_name="default")
+        self.assertEqual(frame_inspect.get("status"), "ok")
+        self.assertEqual(frame_inspect.get("result", {}).get("count"), 1)
+
+        frame_theme = send_session_command({
+            "action": "check_theme",
+            "frame": "widget",
+            "theme": "dark",
+            "exclude_colors": ["#282828"],
+        }, session_name="default")
+        self.assertEqual(frame_theme.get("status"), "ok")
+        surface_colors = {s["color"] for s in frame_theme.get("dominant_surfaces", [])}
+        self.assertIn("rgb(32, 33, 36)", surface_colors)
+
         # Stop
         stop_res = stop_session("default")
         self.assertEqual(stop_res.get("status"), "ok")
