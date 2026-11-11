@@ -60,10 +60,10 @@ dead_selectors[5]{selector,reason}:
 Compose tools dynamically according to the user's goal:
 
 ### A. DOM Exploration & Selector Synthesis
-* **`search <url> [--text TEXT] [--keyword KW] [--role ROLE] [--tag TAG] --toon`**  
-  Synthesizes resilient CSS selectors scored by stability. Prefers semantic IDs, `data-testid`, and stable class names over obfuscated hashes (`.css-1x2y3z`).
-* **`inspect <url> --selector <sel> --toon`**  
-  Inspects computed styles, bounding box geometry, and outer HTML snippet of live elements.
+* **`search <url> [--text TEXT] [--keyword KW] [--role ROLE] [--tag TAG] [--wait SEL_OR_MS] [--actions JSON] --toon`**  
+  Synthesizes resilient CSS selectors scored by stability. Prefers semantic IDs, `data-testid`, and stable class names over obfuscated hashes (`.css-1x2y3z`). Supports `--wait` and pre-search `--actions` for dynamic SPAs.
+* **`inspect <url> --selector <sel> [--rules] [--properties PROPS] [--actions JSON] [--css RULE_OR_FILE] [--pseudo PSEUDO] --toon`**  
+  Inspects computed styles, bounding box geometry, custom CSS properties (`--var`), and matching stylesheet rules (`--rules`) with optional pre-inspection user actions and candidate CSS injection.
 * **`map-site <url> [--max-archetypes N] [--css <path>] --toon`**  
   Uses DOM structural fingerprinting (Jaccard similarity) to discover distinct page templates (home, search, item view, profile) while pruning duplicate forum threads or articles.
 
@@ -117,7 +117,7 @@ Direct programmatic access to browser extension state via IndexedDB:
 
 ### G. Browser Automation
 * **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] --toon`**: Capture viewport or element screenshot to `/tmp/browser-toolkit/screenshot.png`.
-* **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (click, hover, fill, wait).
+* **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (`click`, `click_text`, `hover`, `fill`, `press`, `wait`, `wait_for`, `scroll`, `scroll_into_view`, `evaluate`, `screenshot`).
 
 ---
 

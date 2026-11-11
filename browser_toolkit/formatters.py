@@ -36,6 +36,11 @@ def dump_data(data: Any, fmt: str = "toon", compact: bool = True) -> str:
     return str(data)
 
 
+def to_toon(data: Any, compact: bool = True) -> str:
+    """Serializes data into TOON format."""
+    return dump_data(data, fmt="toon", compact=compact)
+
+
 def output_result(
     data: Any,
     args: Any,

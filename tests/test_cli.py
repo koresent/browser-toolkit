@@ -25,11 +25,38 @@ class TestCLI(unittest.TestCase):
         self.assertTrue(args.only_broken)
 
     def test_search_subcommand_args(self):
-        args = self.parser.parse_args(["search", "https://github.com", "--keyword", "copilot", "--tag", "button"])
+        args = self.parser.parse_args([
+            "search", "https://github.com",
+            "--keyword", "copilot",
+            "--tag", "button",
+            "--wait", ".chatlist-chat",
+            "--actions", '[{"action": "wait", "ms": 500}]',
+        ])
         self.assertEqual(args.command, "search")
         self.assertEqual(args.url, "https://github.com")
         self.assertEqual(args.keyword, "copilot")
         self.assertEqual(args.tag, "button")
+        self.assertEqual(args.wait, ".chatlist-chat")
+        self.assertEqual(args.actions, '[{"action": "wait", "ms": 500}]')
+
+    def test_inspect_subcommand_args(self):
+        args = self.parser.parse_args([
+            "inspect", "https://example.com",
+            "--selector", ".bubble.is-out",
+            "--rules",
+            "--properties", "color,border-radius",
+            "--css", ".bubble { border-radius: 10px; }",
+            "--pseudo", "::after",
+            "--actions", '[{"action": "click", "selector": ".chat"}]',
+        ])
+        self.assertEqual(args.command, "inspect")
+        self.assertEqual(args.url, "https://example.com")
+        self.assertEqual(args.selector, ".bubble.is-out")
+        self.assertTrue(args.rules)
+        self.assertEqual(args.properties, "color,border-radius")
+        self.assertEqual(args.css, ".bubble { border-radius: 10px; }")
+        self.assertEqual(args.pseudo, "::after")
+        self.assertIn("click", args.actions)
 
     def test_test_rule_subcommand_args(self):
         args = self.parser.parse_args(["test-rule", "https://example.com", "--css", "h1 { color: red; }"])

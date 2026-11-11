@@ -3,9 +3,10 @@ from playwright.sync_api import sync_playwright
 
 from browser_toolkit.css_auditor import audit_css_on_page
 from browser_toolkit.interaction import PageInteractor, execute_action_sequence
-from browser_toolkit.search import JS_SEARCH_DOM
+from browser_toolkit.search import JS_SEARCH_DOM, search_dom
 from browser_toolkit.selector_generator import JS_SELECTOR_SYNTHESIZER
 from browser_toolkit.test_rule import JS_TEST_RULE_IMPACT, test_rule_impact
+from browser_toolkit.runner import AuditorRunner
 
 
 class TestDOMTools(unittest.TestCase):
@@ -45,11 +46,54 @@ class TestDOMTools(unittest.TestCase):
             {"action": "fill", "selector": "#search-box", "text": "Dark Theme"},
             {"action": "click", "selector": "#submit-btn"},
             {"action": "wait", "ms": 50},
+            {"action": "evaluate", "script": "document.getElementById('result').textContent = 'Eval Modified'"},
+            {"action": "click_text", "text": "Go"},
         ]
         results = execute_action_sequence(page, actions)
-        self.assertEqual(len(results), 3)
+        self.assertEqual(len(results), 5)
         self.assertTrue(all(r["status"] == "success" for r in results))
         self.assertEqual(page.text_content("#result"), "Submitted Dark Theme")
+        page.close()
+
+    def test_extended_interactions(self):
+        page = self.browser.new_page()
+        page.set_content("""
+        <!DOCTYPE html>
+        <html>
+        <body>
+          <div id="scroll-box" style="height: 100px; overflow-y: scroll;">
+            <div style="height: 500px;">
+              <button id="deep-btn">Deep Target</button>
+            </div>
+          </div>
+        </body>
+        </html>
+        """)
+
+        interactor = PageInteractor(page)
+        self.assertTrue(interactor.scroll("#scroll-box", y=150))
+        self.assertTrue(interactor.scroll_into_view("#deep-btn"))
+        self.assertTrue(interactor.click_text("Deep Target"))
+        page.close()
+
+    def test_search_dom_innermost_and_wait(self):
+        page = self.browser.new_page()
+        page.set_content("""
+        <!DOCTYPE html>
+        <html>
+        <body>
+          <div class="chatlist">
+            <div class="chat-row">
+              <span class="user-title">Notes</span>
+            </div>
+          </div>
+        </body>
+        </html>
+        """)
+
+        matches = search_dom(page, text="Notes", wait=50)
+        self.assertGreater(len(matches), 0)
+        self.assertEqual(matches[0]["tagName"], "span")
         page.close()
 
     def test_selector_synthesizer(self):
@@ -158,6 +202,48 @@ class TestDOMTools(unittest.TestCase):
         btn_item = btn_impact["matched"][0]
         self.assertFalse(btn_item["isLargeElement"])
         page.close()
+
+class TestInspectElement(unittest.TestCase):
+    def test_inspect_element_with_rules_and_custom_props(self):
+        runner = AuditorRunner(use_profile=False, headless=True)
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            :root { --main-bg: #282828; }
+            .box { background-color: var(--main-bg); border-radius: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="box" id="test-box">Box Content</div>
+        </body>
+        </html>
+        """
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
+            f.write(html_content)
+            temp_url = f"file://{f.name}"
+
+        try:
+            res = runner.inspect_element(
+                url=temp_url,
+                selector=".box",
+                include_rules=True,
+                properties=["backgroundColor", "borderRadius"],
+            )
+            self.assertEqual(res["result"]["count"], 1)
+            item = res["result"]["items"][0]
+            self.assertIn("12px", item["computed"]["borderRadius"])
+            self.assertIn("--main-bg", item["customProperties"])
+            self.assertTrue(len(item["matchedRules"]) > 0)
+            self.assertEqual(item["matchedRules"][0]["selector"], ".box")
+        finally:
+            import os
+            try:
+                os.remove(temp_url.replace("file://", ""))
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

@@ -400,13 +400,45 @@ def print_interact_summary(data: Dict[str, Any]) -> None:
         print(f" Step #{res['step']}: {res['action']} -> {res['status']} {res.get('saved_to', '')}")
 
 
+def parse_actions_arg(raw: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    if not raw:
+        return None
+    try:
+        p = Path(raw)
+        if p.exists():
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return json.loads(raw)
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to parse actions JSON: {e}\n")
+        return None
+
+
 def print_inspect_summary(data: Dict[str, Any]) -> None:
     res = data.get("result", {})
     count = res.get("count", 0)
-    print(f"Inspecting selector on {data.get('url', '')}")
+    print(f"Inspecting selector '{data.get('selector', '')}' on {data.get('url', '')}")
     print(f"Found elements: {count}")
     for idx, item in enumerate(res.get("items", [])):
-        print(f"Element #{idx + 1} <{item['tagName']}>: Display: {item.get('display')}, Visibility: {item.get('visibility')}")
+        print(f"\nElement #{idx + 1} <{item['tagName']}>:")
+        comp = item.get("computed", {})
+        if comp:
+            print("  Computed styles:")
+            for k, v in comp.items():
+                if v:
+                    print(f"    {k}: {v}")
+        cv = item.get("customProperties", {})
+        if cv:
+            print(f"  Custom CSS variables ({len(cv)}):")
+            for k, v in list(cv.items())[:15]:
+                print(f"    {k}: {v}")
+        rules = item.get("matchedRules", [])
+        if rules:
+            print(f"  Matched CSS rules ({len(rules)}):")
+            for r in rules[:10]:
+                props_str = "; ".join(f"{k}: {v}" for k, v in list(r.get("properties", {}).items())[:4])
+                print(f"    {r.get('selector')} [{r.get('source')}] -> {props_str}")
+        print(f"  HTML snippet: {item.get('outerHTML', '')[:160]}...")
 
 
 def print_ext_status(st: Dict[str, Any]) -> None:
@@ -515,6 +547,8 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--keyword", help="Search keyword in class, id, aria attributes")
     search_parser.add_argument("--role", help="Search by ARIA role")
     search_parser.add_argument("--tag", help="Filter by HTML tag")
+    search_parser.add_argument("--wait", help="Wait for selector or ms before searching")
+    search_parser.add_argument("--actions", help="JSON string or file path containing user actions before searching")
     search_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     search_parser.add_argument("--profile", help="Path to custom profile")
     search_parser.add_argument("--headful", action="store_true", help="Run with visible window")
@@ -553,9 +587,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_output_args(interact_parser)
 
     # Command: inspect
-    inspect_parser = subparsers.add_parser("inspect", help="Inspect a selector on a live URL")
+    inspect_parser = subparsers.add_parser("inspect", help="Inspect element computed styles, custom properties, and CSS rules on a live URL")
     inspect_parser.add_argument("url", help="Target URL to open")
     inspect_parser.add_argument("--selector", required=True, help="CSS selector to inspect")
+    inspect_parser.add_argument("--actions", help="JSON string or file path containing user actions before inspecting")
+    inspect_parser.add_argument("--properties", help="Comma-separated CSS properties to inspect (e.g. 'color,border-radius')")
+    inspect_parser.add_argument("--rules", action="store_true", help="Inspect all matching CSS rules from stylesheets")
+    inspect_parser.add_argument("--css", help="Optional CSS rule string or .user.css path to inject before inspecting")
+    inspect_parser.add_argument("--pseudo", help="Pseudo-element to inspect (e.g. '::before', '::after')")
     inspect_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     inspect_parser.add_argument("--profile", help="Path to custom profile")
     inspect_parser.add_argument("--headful", action="store_true", help="Run with visible window")
@@ -856,12 +895,15 @@ def main() -> None:
         output_result(data, args, print_scan_summary)
 
     elif args.command == "search":
+        actions_list = parse_actions_arg(getattr(args, "actions", None))
         data = runner.search(
             url=args.url,
             text=args.text,
             keyword=args.keyword,
             role=args.role,
             tag=args.tag,
+            wait=getattr(args, "wait", None),
+            actions=actions_list,
         )
         output_result(data, args, print_search_results)
 
@@ -885,18 +927,22 @@ def main() -> None:
         output_result(data, args, lambda d: print(f"Screenshot captured and saved to: {d.get('saved_to')}"))
 
     elif args.command == "interact":
-        raw_actions = args.actions
-        if Path(raw_actions).exists():
-            with open(raw_actions, "r", encoding="utf-8") as f:
-                actions_list = json.load(f)
-        else:
-            actions_list = json.loads(raw_actions)
-
+        actions_list = parse_actions_arg(args.actions) or []
         data = runner.interact(url=args.url, actions=actions_list)
         output_result(data, args, print_interact_summary)
 
     elif args.command == "inspect":
-        data = runner.inspect_element(args.url, args.selector)
+        actions_list = parse_actions_arg(getattr(args, "actions", None))
+        props = [p.strip() for p in args.properties.split(",") if p.strip()] if getattr(args, "properties", None) else None
+        data = runner.inspect_element(
+            url=args.url,
+            selector=args.selector,
+            actions=actions_list,
+            properties=props,
+            include_rules=getattr(args, "rules", False),
+            css=getattr(args, "css", None),
+            pseudo=getattr(args, "pseudo", None),
+        )
         output_result(data, args, print_inspect_summary)
 
     elif args.command == "map-site":

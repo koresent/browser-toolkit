@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from playwright.sync_api import Page
 from .selector_generator import JS_SELECTOR_SYNTHESIZER
+from .interaction import execute_action_sequence
 
 JS_SEARCH_DOM = """
 (query) => {
@@ -29,9 +30,21 @@ JS_SEARCH_DOM = """
             if (directText.includes(textQuery)) {
                 match = true;
                 reason = `Direct text contains "${textQuery}"`;
-            } else if ((el.textContent || '').toLowerCase().includes(textQuery) && el.children.length < 5) {
-                match = true;
-                reason = `Content contains "${textQuery}"`;
+            } else {
+                const fullText = (el.textContent || '').toLowerCase();
+                if (fullText.includes(textQuery)) {
+                    let childMatches = false;
+                    for (const ch of el.children) {
+                        if ((ch.textContent || '').toLowerCase().includes(textQuery)) {
+                            childMatches = true;
+                            break;
+                        }
+                    }
+                    if (!childMatches) {
+                        match = true;
+                        reason = `Innermost element containing "${textQuery}"`;
+                    }
+                }
             }
         }
 
@@ -95,7 +108,18 @@ def search_dom(
     keyword: Optional[str] = None,
     role: Optional[str] = None,
     tag: Optional[str] = None,
+    wait: Optional[str] = None,
+    actions: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
+    if actions:
+        execute_action_sequence(page, actions)
+
+    if wait:
+        if str(wait).isdigit():
+            page.wait_for_timeout(int(wait))
+        else:
+            page.wait_for_selector(str(wait), timeout=15000)
+
     # Ensure selector synthesizer is injected
     page.evaluate(JS_SELECTOR_SYNTHESIZER)
 

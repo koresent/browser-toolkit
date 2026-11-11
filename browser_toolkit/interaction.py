@@ -7,13 +7,22 @@ class PageInteractor:
     def __init__(self, page: Page):
         self.page = page
 
-    def click(self, selector: str, timeout: int = 5000) -> bool:
+    def click(self, selector: str, timeout: int = 5000, force: bool = False) -> bool:
         """Clicks an element by selector."""
         try:
-            self.page.click(selector, timeout=timeout)
+            self.page.click(selector, timeout=timeout, force=force)
             return True
         except Exception as e:
             raise RuntimeError(f"Failed to click '{selector}': {e}")
+
+    def click_text(self, text: str, timeout: int = 5000, force: bool = False) -> bool:
+        """Clicks an element containing the given text."""
+        try:
+            loc = self.page.get_by_text(text, exact=False).first
+            loc.click(timeout=timeout, force=force)
+            return True
+        except Exception as e:
+            raise RuntimeError(f"Failed to click text '{text}': {e}")
 
     def hover(self, selector: str, timeout: int = 5000) -> bool:
         """Hovers over an element to trigger CSS :hover states or dropdowns."""
@@ -46,6 +55,37 @@ class PageInteractor:
             return True
         except Exception as e:
             raise RuntimeError(f"Timed out waiting for '{selector}': {e}")
+
+    def scroll(self, selector: Optional[str] = None, x: int = 0, y: int = 0) -> bool:
+        """Scrolls container or page by (x, y) delta."""
+        try:
+            if selector:
+                self.page.eval_on_selector(
+                    selector,
+                    "(el, [dx, dy]) => { el.scrollLeft += dx; el.scrollTop += dy; }",
+                    [x, y],
+                )
+            else:
+                self.page.mouse.wheel(x, y)
+            return True
+        except Exception as e:
+            raise RuntimeError(f"Failed to scroll '{selector or 'page'}': {e}")
+
+    def scroll_into_view(self, selector: str, timeout: int = 5000) -> bool:
+        """Scrolls element into view."""
+        try:
+            loc = self.page.locator(selector).first
+            loc.scroll_into_view_if_needed(timeout=timeout)
+            return True
+        except Exception as e:
+            raise RuntimeError(f"Failed to scroll '{selector}' into view: {e}")
+
+    def evaluate(self, script: str) -> Any:
+        """Evaluates arbitrary JavaScript in the page context."""
+        try:
+            return self.page.evaluate(script)
+        except Exception as e:
+            raise RuntimeError(f"Failed to evaluate script: {e}")
 
     def capture_screenshot(
         self,
@@ -92,15 +132,39 @@ def execute_action_sequence(
 
         try:
             if action_type == "click":
-                interactor.click(sel)
+                timeout = int(act.get("timeout", 5000))
+                force = bool(act.get("force", False))
+                if sel:
+                    interactor.click(sel, timeout=timeout, force=force)
+                elif act.get("text"):
+                    interactor.click_text(act["text"], timeout=timeout, force=force)
+                else:
+                    raise ValueError("Click action requires 'selector' or 'text'")
+            elif action_type == "click_text":
+                interactor.click_text(
+                    act.get("text", ""),
+                    timeout=int(act.get("timeout", 5000)),
+                    force=bool(act.get("force", False)),
+                )
             elif action_type == "hover":
-                interactor.hover(sel)
+                interactor.hover(sel, timeout=int(act.get("timeout", 5000)))
             elif action_type == "fill":
-                interactor.fill(sel, act.get("text", ""))
+                interactor.fill(sel, act.get("text", ""), timeout=int(act.get("timeout", 5000)))
             elif action_type == "press":
                 interactor.press(act.get("key", "Enter"))
             elif action_type == "wait_for":
-                interactor.wait_for(sel)
+                interactor.wait_for(sel, timeout=int(act.get("timeout", 5000)))
+            elif action_type == "scroll" or action_type == "wheel":
+                x = int(act.get("x", act.get("delta_x", 0)))
+                y = int(act.get("y", act.get("delta_y", 0)))
+                interactor.scroll(selector=sel, x=x, y=y)
+            elif action_type == "scroll_into_view":
+                interactor.scroll_into_view(sel, timeout=int(act.get("timeout", 5000)))
+            elif action_type == "evaluate":
+                script = act.get("script") or act.get("js") or ""
+                eval_res = interactor.evaluate(script)
+                if eval_res is not None:
+                    res["result"] = eval_res
             elif action_type == "wait":
                 ms = int(act.get("ms", 1000))
                 page.wait_for_timeout(ms)

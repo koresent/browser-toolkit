@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from browser_toolkit.formatters import dump_data, resolve_format, output_result
+from browser_toolkit.formatters import dump_data, resolve_format, output_result, to_toon
 from browser_toolkit.cli import build_parser
 
 
@@ -30,6 +30,11 @@ class TestFormatters(unittest.TestCase):
         self.assertIn("type: userstyle", rendered)
         self.assertIn("items[2]{id,selector}:", rendered)
         self.assertIn("1,.header", rendered)
+
+    def test_to_toon_helper(self):
+        rendered = to_toon(self.sample_data)
+        self.assertIn("type: userstyle", rendered)
+        self.assertIn("items[2]{id,selector}:", rendered)
 
     def test_dump_compact_json(self):
         rendered = dump_data(self.sample_data, fmt="json")

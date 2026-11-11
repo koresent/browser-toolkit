@@ -322,10 +322,19 @@ class AuditorRunner:
 
         return report
 
-    def inspect_element(self, url: str, selector: str) -> Dict[str, Any]:
+    def inspect_element(
+        self,
+        url: str,
+        selector: str,
+        actions: Optional[List[Dict[str, Any]]] = None,
+        properties: Optional[List[str]] = None,
+        include_rules: bool = False,
+        css: Optional[str] = None,
+        pseudo: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Inspects an element on a live page using the Zen profile,
-        returning its HTML, computed styles, and attributes.
+        returning its HTML, computed styles, CSS custom properties, and matched stylesheet rules.
         """
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
@@ -333,36 +342,123 @@ class AuditorRunner:
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(1000)
+
+                    if css:
+                        css_content = css
+                        p_css = Path(css)
+                        if p_css.exists():
+                            info = parse_userstyle(p_css)
+                            css_content = info.get_combined_css_for_url(url)
+                        page.add_style_tag(content=css_content)
+
+                    if actions:
+                        execute_action_sequence(page, actions)
+
+                    eval_opts = {
+                        "properties": properties or [],
+                        "includeRules": bool(include_rules),
+                        "pseudo": pseudo,
+                    }
 
                     data = page.evaluate(
                         """
-                        (sel) => {
+                        ([sel, opts]) => {
                             const els = document.querySelectorAll(sel);
                             if (els.length === 0) return { count: 0, items: [] };
+
+                            const reqProps = opts.properties || [];
+                            const includeRules = Boolean(opts.includeRules);
+                            const pseudo = opts.pseudo || null;
+
+                            function getMatchedRules(el) {
+                                const matched = [];
+                                for (const sheet of document.styleSheets) {
+                                    try {
+                                        const rules = sheet.cssRules || sheet.rules;
+                                        if (!rules) continue;
+                                        for (const rule of rules) {
+                                            if (rule.type === CSSRule.STYLE_RULE && rule.selectorText) {
+                                                try {
+                                                    if (el.matches(rule.selectorText)) {
+                                                        const decl = {};
+                                                        for (let i = 0; i < rule.style.length; i++) {
+                                                            const p = rule.style[i];
+                                                            decl[p] = rule.style.getPropertyValue(p);
+                                                        }
+                                                        matched.push({
+                                                            selector: rule.selectorText,
+                                                            properties: decl,
+                                                            source: sheet.href ? sheet.href.split('/').pop().split('?')[0] : 'inline'
+                                                        });
+                                                    }
+                                                } catch (_) {}
+                                            }
+                                        }
+                                    } catch (_) {}
+                                }
+                                return matched;
+                            }
+
+                            function getCustomVars(comp) {
+                                const vars = {};
+                                for (let i = 0; i < comp.length; i++) {
+                                    const p = comp[i];
+                                    if (p.startsWith('--')) {
+                                        vars[p] = comp.getPropertyValue(p).trim();
+                                    }
+                                }
+                                return vars;
+                            }
 
                             const items = [];
                             for (let i = 0; i < Math.min(els.length, 5); i++) {
                                 const el = els[i];
-                                const comp = window.getComputedStyle(el);
+                                const comp = window.getComputedStyle(el, pseudo);
+                                const rect = el.getBoundingClientRect();
+
                                 const attrs = {};
                                 for (const a of el.attributes) {
                                     attrs[a.name] = a.value;
                                 }
-                                items.push({
+
+                                const computed = {};
+                                if (reqProps.length > 0) {
+                                    for (const p of reqProps) {
+                                        computed[p] = comp.getPropertyValue(p) || comp[p] || '';
+                                    }
+                                } else {
+                                    computed.display = comp.display;
+                                    computed.visibility = comp.visibility;
+                                    computed.opacity = comp.opacity;
+                                    computed.color = comp.color;
+                                    computed.backgroundColor = comp.backgroundColor;
+                                    computed.backgroundImage = comp.backgroundImage;
+                                    computed.borderRadius = comp.borderRadius;
+                                    computed.boxShadow = comp.boxShadow;
+                                    computed.border = comp.border;
+                                    computed.fill = comp.fill;
+                                }
+
+                                const item = {
                                     tagName: el.tagName.toLowerCase(),
                                     attributes: attrs,
-                                    outerHTML: el.outerHTML.slice(0, 500),
-                                    display: comp.display,
-                                    visibility: comp.visibility,
-                                    color: comp.color,
-                                    backgroundColor: comp.backgroundColor,
-                                });
+                                    rect: { width: Math.round(rect.width), height: Math.round(rect.height) },
+                                    computed: computed,
+                                    customProperties: getCustomVars(comp),
+                                    outerHTML: el.outerHTML.slice(0, 500)
+                                };
+
+                                if (includeRules) {
+                                    item.matchedRules = getMatchedRules(el);
+                                }
+
+                                items.push(item);
                             }
                             return { count: els.length, items: items };
                         }
                         """,
-                        selector,
+                        [selector, eval_opts],
                     )
                     return {"url": url, "selector": selector, "result": data}
                 finally:
@@ -375,6 +471,8 @@ class AuditorRunner:
         keyword: Optional[str] = None,
         role: Optional[str] = None,
         tag: Optional[str] = None,
+        wait: Optional[str] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
@@ -382,8 +480,8 @@ class AuditorRunner:
 
                 try:
                     safe_goto(page, url, wait_until="domcontentloaded", timeout=30000)
-                    page.wait_for_timeout(2000)
-                    results = search_dom(page, text=text, keyword=keyword, role=role, tag=tag)
+                    page.wait_for_timeout(1000)
+                    results = search_dom(page, text=text, keyword=keyword, role=role, tag=tag, wait=wait, actions=actions)
                     return {"url": url, "matches_count": len(results), "matches": results}
                 finally:
                     context.close()
