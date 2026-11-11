@@ -26,14 +26,24 @@ While `browser-toolkit` supports human-readable text and JSON for developers and
 * **Zero Visual Fluff**: Strips all decorative headers, box-drawing characters, and empty lines that waste tokens.
 
 ### Enforcing TOON
-Set the environment variable at the beginning of your agent execution session:
-```bash
-export BROWSER_TOOLKIT_FORMAT=toon
-```
-When `BROWSER_TOOLKIT_FORMAT=toon` is set, every subcommand automatically outputs TOON without requiring `--toon` on every invocation. If not set, always pass the `--toon` flag explicitly:
-```bash
-browser-toolkit <subcommand> [args] --toon
-```
+Choose **one** of the following two methods:
+
+* **Method A (Persistent Configuration — Recommended)**:
+  Run once at the start of your workflow:
+  ```bash
+  browser-toolkit config --set-format toon
+  ```
+  Once set, every subsequent CLI command automatically outputs TOON without requiring `--toon` or environment variables.
+
+* **Method B (Explicit CLI Flag)**:
+  Pass `--toon` on each command:
+  ```bash
+  browser-toolkit <subcommand> [args] --toon
+  ```
+
+> [!WARNING]
+> **NEVER prepend `export BROWSER_TOOLKIT_FORMAT=toon;` on every single command or combine it with `--toon`**.
+> Chaining `export BROWSER_TOOLKIT_FORMAT=toon; browser-toolkit ... --toon` is redundant and wasteful. Set the persistent config once (Method A) or use the `--toon` flag (Method B).
 
 **Rules for Agents**:
 * Never request `--json` or unformatted human text output.
@@ -115,13 +125,58 @@ Direct programmatic access to browser extension state via IndexedDB:
 * **`preview <url> <style.user.css>`**: Live hot-reload watcher injecting CSS in <20ms without page refresh.
 * **`preview-js <script.user.js>`**: Live hot-reload watcher for scripts.
 
-### G. Browser Automation
+### G. Browser Automation & Persistent Sessions
 * **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] --toon`**: Capture viewport or element screenshot to `/tmp/browser-toolkit/screenshot.png`.
-* **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (`click`, `click_text`, `hover`, `fill`, `press`, `wait`, `wait_for`, `scroll`, `scroll_into_view`, `evaluate`, `screenshot`).
+* **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (`click`, `click_text`, `hover`, `fill`, `press`, `wait`, `wait_for`, `scroll`, `scroll_into_view`, `evaluate`, `evaluate_many`, `screenshot`).
+* **`session start [url] [--no-profile] [--profile PATH] [--headful] --toon`**: Launches a background session daemon maintaining an active Playwright instance, Zen profile clone, and open page over `/tmp/browser-toolkit/session.sock`. Automatically closes after 15 minutes of inactivity. Eliminates repeated Playwright restart latency.
+* **`session status --toon`**: Checks session status, current URL, page title, and uptime.
+* **`session goto <url> --toon`**: Navigates active session to a URL.
+* **`session eval <script> --toon`**: Evaluates JavaScript expression in the active session page.
+* **`session eval-many <scripts_json_or_file> --toon`**: Evaluates a batch dictionary of JavaScript expressions in one call.
+* **`session interact --actions <json_or_file> --toon`**: Executes action sequence in the active session.
+* **`session screenshot [--selector SEL] [--output PATH] [--full-page] --toon`**: Captures screenshot from the active session.
+* **`session stop --toon`**: Cleanly shuts down daemon, context, and temp profile.
+
+### H. Configuration & Defaults
+* **`config [--set-format toon|json|json-pretty|text] [key] [value]`**: Inspects or persists CLI defaults (e.g., `browser-toolkit config --set-format toon` writes to `/tmp/browser-toolkit/default_format`).
 
 ---
 
-## 4. Extensibility Protocol for AI Agents
+## 4. Agent Anti-Patterns & Operational Guidelines
+
+Adhere to the following golden rules when reverse-engineering and styling web applications:
+
+### Anti-Pattern 1: Scraping or Grepping Webpack / CDN JavaScript Bundles
+* **NEVER** download, fetch, or grep minified CDN script chunks (`index-*.js`, `vendors-*.js`, Webpack runtime bundles).
+* SPAs minify, hash, and dynamically chunk code across dozens of files. Grepping raw JavaScript bundles burns thousands of context tokens and yields obsolete, mangled, or unreachable class names.
+* **Always search the live rendered DOM**:
+  ```bash
+  browser-toolkit search <url> --text "Visible Label" --toon
+  browser-toolkit search <url> --keyword "search-input" --toon
+  ```
+
+### Anti-Pattern 2: Manual Color Guessing Without `extract-palette`
+* **NEVER** guess color values or manually hunt through CSS files before inspecting the live palette.
+* Always run:
+  ```bash
+  browser-toolkit extract-palette <url> --toon
+  ```
+  This immediately clusters colors by DOM frequency and surfaces root CSS custom properties (`--color-...`, `--bg-...`, `--border-...`).
+
+### Anti-Pattern 3: Repeated Cold Browser Launches for Multi-Step Exploration
+* **DO NOT** invoke `inspect` or `screenshot` 15 times in a row on the same site if it takes multi-step state setup.
+* Instead, start a persistent session:
+  ```bash
+  browser-toolkit session start "https://example.com" --toon
+  browser-toolkit session eval "document.title" --toon
+  browser-toolkit session interact --actions '[{"action": "click", "selector": "#menu"}]' --toon
+  browser-toolkit session screenshot --selector ".dropdown" --toon
+  browser-toolkit session stop --toon
+  ```
+
+---
+
+## 5. Extensibility Protocol for AI Agents
 
 When modifying or extending `browser-toolkit`, agents must adhere to the following rules:
 

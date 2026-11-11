@@ -5,10 +5,16 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-from .formatters import output_result
+from .formatters import get_default_format, output_result, set_default_format
 from .profile import find_zen_profile
 from .runner import AuditorRunner
 from .scanner import scan_directory
+from .session_client import (
+    is_session_alive,
+    send_session_command,
+    start_session,
+    stop_session,
+)
 
 
 def print_style_summary(report: Dict[str, Any]) -> None:
@@ -831,6 +837,60 @@ def build_parser() -> argparse.ArgumentParser:
     prof_p = subparsers.add_parser("profile-info", help="Show detected Zen profile location")
     add_output_args(prof_p)
 
+    # Command: config
+    cfg_parser = subparsers.add_parser("config", help="Manage persistent browser-toolkit settings (e.g. default format)")
+    cfg_parser.add_argument("--set-format", choices=["toon", "json", "json-pretty", "text"], help="Set persistent default output format")
+    cfg_parser.add_argument("key", nargs="?", choices=["format"], help="Setting key (e.g. 'format')")
+    cfg_parser.add_argument("value", nargs="?", help="Value to set for key")
+    add_output_args(cfg_parser)
+
+    # Command: session
+    session_parser = subparsers.add_parser("session", help="Manage persistent Playwright browser session")
+    session_sub = session_parser.add_subparsers(dest="session_command", required=True)
+
+    # session start [url] [--no-profile] [--profile PATH] [--headful]
+    s_start = session_sub.add_parser("start", help="Start background session daemon or navigate to URL")
+    s_start.add_argument("url", nargs="?", help="Initial URL to navigate")
+    s_start.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
+    s_start.add_argument("--profile", help="Path to custom profile")
+    s_start.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_output_args(s_start)
+
+    # session status
+    s_status = session_sub.add_parser("status", help="Get status of active session daemon")
+    add_output_args(s_status)
+
+    # session goto <url>
+    s_goto = session_sub.add_parser("goto", help="Navigate active session to a URL")
+    s_goto.add_argument("url", help="Target URL")
+    add_output_args(s_goto)
+
+    # session eval <script>
+    s_eval = session_sub.add_parser("eval", help="Evaluate JavaScript expression in active session")
+    s_eval.add_argument("script", help="JavaScript code to evaluate")
+    add_output_args(s_eval)
+
+    # session eval-many <scripts>
+    s_eval_many = session_sub.add_parser("eval-many", help="Evaluate batch of JavaScript expressions")
+    s_eval_many.add_argument("scripts", help="JSON dictionary of scripts or path to JSON file")
+    add_output_args(s_eval_many)
+
+    # session interact --actions <json_or_file>
+    s_interact = session_sub.add_parser("interact", help="Perform sequence of user actions in active session")
+    s_interact.add_argument("--actions", required=True, help="JSON list of actions or path to JSON file")
+    add_output_args(s_interact)
+
+    # session screenshot [--output PATH] [--selector SEL] [--full-page]
+    s_shot = session_sub.add_parser("screenshot", help="Capture screenshot in active session")
+    s_shot.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "session_screenshot.png"), help="Output image file path")
+    s_shot.add_argument("--selector", help="Capture only this element")
+    s_shot.add_argument("--full-page", action="store_true", help="Capture full page height")
+    add_output_args(s_shot)
+
+    # session stop
+    s_stop = session_sub.add_parser("stop", help="Stop background session daemon and close browser")
+    add_output_args(s_stop)
+
     return parser
 
 
@@ -850,6 +910,119 @@ def main() -> None:
             lambda d: print(f"Zen profile found: {d['profile_dir']}" if d["profile_found"] else "Zen profile not found."),
         )
         sys.exit(0 if prof else 1)
+
+    if args.command == "config":
+        new_fmt = getattr(args, "set_format", None)
+        if not new_fmt and getattr(args, "key", None) == "format" and getattr(args, "value", None):
+            new_fmt = args.value
+
+        if new_fmt:
+            set_default_format(new_fmt)
+            current_fmt = new_fmt
+            action = "set"
+        else:
+            current_fmt = get_default_format() or "not set (default: text)"
+            action = "get"
+        data = {"status": "ok", "action": action, "default_format": current_fmt}
+        output_result(
+            data,
+            args,
+            lambda d: print(f"Persistent default format: {d['default_format']}"),
+        )
+        sys.exit(0)
+
+    if args.command == "session":
+        session_cmd = getattr(args, "session_command", None)
+        if session_cmd == "start":
+            res = start_session(
+                url=getattr(args, "url", None),
+                profile_path=getattr(args, "profile", None),
+                no_profile=getattr(args, "no_profile", False),
+                headful=getattr(args, "headful", False),
+            )
+            output_result(
+                res,
+                args,
+                lambda d: print(f"Session active: URL={d.get('url')} Title='{d.get('title')}'"),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "status":
+            alive = is_session_alive()
+            if not alive:
+                res = {"status": "inactive", "message": "No active session"}
+            else:
+                res = send_session_command({"action": "status"})
+            output_result(
+                res,
+                args,
+                lambda d: print(f"Session status: {d.get('status')} | URL: {d.get('url', 'none')} | Uptime: {d.get('uptime_seconds', 0)}s"),
+            )
+            sys.exit(0 if alive else 1)
+
+        elif session_cmd == "goto":
+            res = send_session_command({"action": "goto", "url": args.url})
+            output_result(
+                res,
+                args,
+                lambda d: print(f"Navigated to: {d.get('url')} ('{d.get('title')}')"),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "eval":
+            res = send_session_command({"action": "eval", "script": args.script})
+            output_result(
+                res,
+                args,
+                lambda d: print(d.get("result")),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "eval-many":
+            script_raw = args.scripts.strip()
+            if Path(script_raw).is_file():
+                script_raw = Path(script_raw).read_text(encoding="utf-8")
+            scripts = json.loads(script_raw)
+            res = send_session_command({"action": "eval_many", "scripts": scripts})
+            output_result(
+                res,
+                args,
+                lambda d: print(d.get("results")),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "interact":
+            actions_list = parse_actions_arg(args.actions) or []
+            res = send_session_command({"action": "interact", "actions": actions_list})
+            output_result(
+                res,
+                args,
+                lambda d: print(f"Interaction steps executed: {len(d.get('results', []))}"),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "screenshot":
+            res = send_session_command({
+                "action": "screenshot",
+                "output": args.output,
+                "selector": args.selector,
+                "full_page": args.full_page,
+            })
+            output_result(
+                res,
+                args,
+                lambda d: print(f"Screenshot saved to: {d.get('saved_to')}"),
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
+        elif session_cmd == "stop":
+            res = stop_session()
+            output_result(
+                res,
+                args,
+                lambda d: print("Session stopped."),
+            )
+            sys.exit(0)
 
     runner = AuditorRunner(
         profile_path=getattr(args, "profile", None),

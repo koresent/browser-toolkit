@@ -110,6 +110,51 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.ext_action, "backup")
         self.assertEqual(args.out_stylus, "custom-stylus.json")
 
+    def test_config_subcommand_args(self):
+        args1 = self.parser.parse_args(["config", "--set-format", "toon"])
+        self.assertEqual(args1.command, "config")
+        self.assertEqual(args1.set_format, "toon")
+
+        args2 = self.parser.parse_args(["config", "format", "json"])
+        self.assertEqual(args2.command, "config")
+        self.assertEqual(args2.key, "format")
+        self.assertEqual(args2.value, "json")
+
+    def test_session_subcommand_args(self):
+        args_start = self.parser.parse_args(["session", "start", "https://example.com", "--no-profile", "--toon"])
+        self.assertEqual(args_start.command, "session")
+        self.assertEqual(args_start.session_command, "start")
+        self.assertEqual(args_start.url, "https://example.com")
+        self.assertTrue(args_start.no_profile)
+        self.assertTrue(args_start.toon)
+
+        args_status = self.parser.parse_args(["session", "status"])
+        self.assertEqual(args_status.session_command, "status")
+
+        args_goto = self.parser.parse_args(["session", "goto", "https://example.com/login"])
+        self.assertEqual(args_goto.session_command, "goto")
+        self.assertEqual(args_goto.url, "https://example.com/login")
+
+        args_eval = self.parser.parse_args(["session", "eval", "document.title"])
+        self.assertEqual(args_eval.session_command, "eval")
+        self.assertEqual(args_eval.script, "document.title")
+
+        args_eval_many = self.parser.parse_args(["session", "eval-many", '{"a": "1"}'])
+        self.assertEqual(args_eval_many.session_command, "eval-many")
+        self.assertEqual(args_eval_many.scripts, '{"a": "1"}')
+
+        args_interact = self.parser.parse_args(["session", "interact", "--actions", '[{"action": "wait", "ms": 100}]'])
+        self.assertEqual(args_interact.session_command, "interact")
+        self.assertEqual(args_interact.actions, '[{"action": "wait", "ms": 100}]')
+
+        args_shot = self.parser.parse_args(["session", "screenshot", "--selector", "#main", "--full-page"])
+        self.assertEqual(args_shot.session_command, "screenshot")
+        self.assertEqual(args_shot.selector, "#main")
+        self.assertTrue(args_shot.full_page)
+
+        args_stop = self.parser.parse_args(["session", "stop"])
+        self.assertEqual(args_stop.session_command, "stop")
+
     def test_profile_info_args(self):
         args = self.parser.parse_args(["profile-info", "--toon"])
         self.assertEqual(args.command, "profile-info")

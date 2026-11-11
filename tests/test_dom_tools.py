@@ -75,6 +75,23 @@ class TestDOMTools(unittest.TestCase):
         self.assertTrue(interactor.scroll_into_view("#deep-btn"))
         self.assertTrue(interactor.click_text("Deep Target"))
         self.assertTrue(interactor.wait_for("50"))
+
+        # Test evaluate_many
+        batch_res = interactor.evaluate_many({
+            "title": "document.title",
+            "btn_text": "document.querySelector('#deep-btn').textContent",
+            "math": "10 * 5",
+        })
+        self.assertEqual(batch_res["btn_text"], "Deep Target")
+        self.assertEqual(batch_res["math"], 50)
+
+        # Test execute_action_sequence with evaluate_many
+        seq_res = execute_action_sequence(page, [
+            {"action": "evaluate_many", "scripts": {"one": "1 + 1", "two": "2 + 2"}},
+        ])
+        self.assertEqual(seq_res[0]["status"], "success")
+        self.assertEqual(seq_res[0]["results"], {"one": 2, "two": 4})
+
         page.close()
 
     def test_search_dom_innermost_and_wait(self):

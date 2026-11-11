@@ -91,6 +91,23 @@ class PageInteractor:
         except Exception as e:
             raise RuntimeError(f"Failed to evaluate script: {e}")
 
+    def evaluate_many(self, scripts: Dict[str, str] | List[str]) -> Dict[str, Any]:
+        """Evaluates multiple JavaScript expressions or statements in a batch."""
+        res: Dict[str, Any] = {}
+        if isinstance(scripts, dict):
+            items = scripts.items()
+        elif isinstance(scripts, list):
+            items = [(str(i), s) for i, s in enumerate(scripts)]
+        else:
+            raise ValueError("scripts must be a dict or list")
+
+        for key, code in items:
+            try:
+                res[key] = self.page.evaluate(code)
+            except Exception as e:
+                res[key] = f"error: {e}"
+        return res
+
     def capture_screenshot(
         self,
         output_path: str | Path,
@@ -169,6 +186,10 @@ def execute_action_sequence(
                 eval_res = interactor.evaluate(script)
                 if eval_res is not None:
                     res["result"] = eval_res
+            elif action_type == "evaluate_many":
+                scripts = act.get("scripts") or {}
+                batch_res = interactor.evaluate_many(scripts)
+                res["results"] = batch_res
             elif action_type == "wait":
                 ms = int(act.get("ms", 1000))
                 page.wait_for_timeout(ms)
