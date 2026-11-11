@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import select
 import signal
 import socket
@@ -17,19 +18,35 @@ from .interaction import PageInteractor, execute_action_sequence
 from .navigation import safe_goto
 from .profile import ZenProfileContext
 
-SOCKET_PATH = Path(tempfile.gettempdir()) / "browser-toolkit" / "session.sock"
-PID_PATH = Path(tempfile.gettempdir()) / "browser-toolkit" / "session.pid"
 DEFAULT_IDLE_TIMEOUT = 900.0  # 15 minutes
+
+
+def get_session_socket_path(session_name: str = "default") -> Path:
+    clean = re.sub(r"[^a-zA-Z0-9_\-]", "_", (session_name or "default").strip())
+    if not clean or clean == "default":
+        return Path(tempfile.gettempdir()) / "browser-toolkit" / "session.sock"
+    return Path(tempfile.gettempdir()) / "browser-toolkit" / f"session_{clean}.sock"
+
+
+def get_session_pid_path(session_name: str = "default") -> Path:
+    clean = re.sub(r"[^a-zA-Z0-9_\-]", "_", (session_name or "default").strip())
+    if not clean or clean == "default":
+        return Path(tempfile.gettempdir()) / "browser-toolkit" / "session.pid"
+    return Path(tempfile.gettempdir()) / "browser-toolkit" / f"session_{clean}.pid"
 
 
 class SessionServer:
     def __init__(
         self,
+        session_name: str = "default",
         profile_path: Optional[str] = None,
         use_profile: bool = True,
         headless: bool = True,
         idle_timeout: float = DEFAULT_IDLE_TIMEOUT,
     ):
+        self.session_name = (session_name or "default").strip()
+        self.socket_path = get_session_socket_path(self.session_name)
+        self.pid_path = get_session_pid_path(self.session_name)
         self.profile_path = profile_path
         self.use_profile = use_profile
         self.headless = headless
@@ -41,20 +58,20 @@ class SessionServer:
 
     def _cleanup_paths(self) -> None:
         try:
-            if SOCKET_PATH.exists():
-                SOCKET_PATH.unlink()
+            if self.socket_path.exists():
+                self.socket_path.unlink()
         except OSError:
             pass
         try:
-            if PID_PATH.exists():
-                PID_PATH.unlink()
+            if self.pid_path.exists():
+                self.pid_path.unlink()
         except OSError:
             pass
 
     def run(self, initial_url: Optional[str] = None) -> None:
         self._cleanup_paths()
-        SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PID_PATH.write_text(str(os.getpid()), encoding="utf-8")
+        self.socket_path.parent.mkdir(parents=True, exist_ok=True)
+        self.pid_path.write_text(str(os.getpid()), encoding="utf-8")
 
         def handle_signal(signum: int, frame: Any) -> None:
             self.running = False
@@ -83,14 +100,13 @@ class SessionServer:
                     safe_goto(page, initial_url)
 
                 self.server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                self.server_sock.bind(str(SOCKET_PATH))
+                self.server_sock.bind(str(self.socket_path))
                 self.server_sock.listen(5)
                 self.server_sock.setblocking(False)
                 self.running = True
 
                 try:
                     while self.running:
-                        # Check idle timeout
                         if time.time() - self.last_activity > self.idle_timeout:
                             break
 
@@ -150,12 +166,13 @@ class SessionServer:
         context: Any,
     ) -> Dict[str, Any]:
         if action == "ping":
-            return {"status": "ok", "message": "pong"}
+            return {"status": "ok", "message": "pong", "session_name": self.session_name}
 
         if action == "status":
             now = time.time()
             return {
                 "status": "ok",
+                "session_name": self.session_name,
                 "url": page.url,
                 "title": page.title() if page.url != "about:blank" else "",
                 "uptime_seconds": round(now - self.start_time, 1),
@@ -169,6 +186,7 @@ class SessionServer:
             safe_goto(page, url)
             return {
                 "status": "ok",
+                "session_name": self.session_name,
                 "url": page.url,
                 "title": page.title(),
             }
@@ -177,36 +195,40 @@ class SessionServer:
             script = req.get("script", "")
             interactor = PageInteractor(page)
             res = interactor.evaluate(script)
-            return {"status": "ok", "result": res}
+            return {"status": "ok", "session_name": self.session_name, "result": res}
 
         if action == "eval_many":
             scripts = req.get("scripts", {})
             interactor = PageInteractor(page)
             res = interactor.evaluate_many(scripts)
-            return {"status": "ok", "results": res}
+            return {"status": "ok", "session_name": self.session_name, "results": res}
 
         if action == "interact":
             actions = req.get("actions", [])
             results = execute_action_sequence(page, actions)
-            return {"status": "ok", "results": results}
+            return {"status": "ok", "session_name": self.session_name, "results": results}
 
         if action == "screenshot":
-            out_path = req.get("output") or str(Path(tempfile.gettempdir()) / "browser-toolkit" / "session_screenshot.png")
+            shots_dir = Path(tempfile.gettempdir()) / "browser-toolkit" / "screenshots"
+            shots_dir.mkdir(parents=True, exist_ok=True)
+            default_shot = str(shots_dir / f"session_{self.session_name}_{int(time.time() * 1000)}.png")
+            out_path = req.get("output") or default_shot
             selector = req.get("selector")
             full_page = bool(req.get("full_page", False))
             interactor = PageInteractor(page)
             saved = interactor.capture_screenshot(out_path, selector=selector, full_page=full_page)
-            return {"status": "ok", "saved_to": str(saved)}
+            return {"status": "ok", "session_name": self.session_name, "saved_to": str(saved)}
 
         if action == "stop":
             self.running = False
-            return {"status": "ok", "message": "Session stopped"}
+            return {"status": "ok", "session_name": self.session_name, "message": "Session stopped"}
 
         return {"status": "error", "message": f"Unknown action: {action}"}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Persistent Playwright browser session daemon")
+    parser.add_argument("--session-name", default="default", help="Session name identifier")
     parser.add_argument("--url", help="Initial URL to navigate")
     parser.add_argument("--profile", help="Path to custom profile")
     parser.add_argument("--no-profile", action="store_true", help="Do not use profile clone")
@@ -215,6 +237,7 @@ def main() -> None:
     args = parser.parse_args()
 
     server = SessionServer(
+        session_name=args.session_name,
         profile_path=args.profile,
         use_profile=not args.no_profile,
         headless=not args.headful,

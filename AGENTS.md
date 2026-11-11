@@ -126,18 +126,26 @@ Direct programmatic access to browser extension state via IndexedDB:
 * **`preview-js <script.user.js>`**: Live hot-reload watcher for scripts.
 
 ### G. Browser Automation & Persistent Sessions
-* **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] --toon`**: Capture viewport or element screenshot to `/tmp/browser-toolkit/screenshot.png`.
+* **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] [--output PATH] --toon`**: Capture viewport or element screenshot (defaults to unique timestamped file in `/tmp/browser-toolkit/screenshots/`).
 * **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (`click`, `click_text`, `hover`, `fill`, `press`, `wait`, `wait_for`, `scroll`, `scroll_into_view`, `evaluate`, `evaluate_many`, `screenshot`).
-* **`session start [url] [--no-profile] [--profile PATH] [--headful] --toon`**: Launches a background session daemon maintaining an active Playwright instance, Zen profile clone, and open page over `/tmp/browser-toolkit/session.sock`. Automatically closes after 15 minutes of inactivity. Eliminates repeated Playwright restart latency.
-* **`session status --toon`**: Checks session status, current URL, page title, and uptime.
-* **`session goto <url> --toon`**: Navigates active session to a URL.
-* **`session eval <script> --toon`**: Evaluates JavaScript expression in the active session page.
-* **`session eval-many <scripts_json_or_file> --toon`**: Evaluates a batch dictionary of JavaScript expressions in one call.
-* **`session interact --actions <json_or_file> --toon`**: Executes action sequence in the active session.
-* **`session screenshot [--selector SEL] [--output PATH] [--full-page] --toon`**: Captures screenshot from the active session.
-* **`session stop --toon`**: Cleanly shuts down daemon, context, and temp profile.
+* **`session start [url] [--name ID] [--no-profile] [--profile PATH] [--headful] --toon`**: Launches a background session daemon named `ID` (default: `'default'` or `BROWSER_TOOLKIT_SESSION` env var) maintaining an active Playwright instance, Zen profile clone, and open page over `/tmp/browser-toolkit/session_<ID>.sock`. Automatically closes after 15 minutes of inactivity.
+* **`session list --toon`**: Lists all active running sessions with their identifiers, current URLs, and uptime.
+* **`session status [--name ID] --toon`**: Checks session status, current URL, page title, and uptime.
+* **`session goto <url> [--name ID] --toon`**: Navigates active session to a URL.
+* **`session eval <script> [--name ID] --toon`**: Evaluates JavaScript expression in the active session page.
+* **`session eval-many <scripts_json_or_file> [--name ID] --toon`**: Evaluates a batch dictionary of JavaScript expressions in one call.
+* **`session interact --actions <json_or_file> [--name ID] --toon`**: Executes action sequence in the active session.
+* **`session screenshot [--selector SEL] [--output PATH] [--full-page] [--name ID] --toon`**: Captures screenshot from the active session.
+* **`session stop [--name ID] --toon`**: Cleanly shuts down daemon, context, and temp profile for session `ID`.
 
-### H. Configuration & Defaults
+### H. Multi-Agent Concurrency & Isolation
+`browser-toolkit` is designed for parallel multi-agent workflows where multiple AI agents work concurrently on different styles and scripts:
+* **Zero DOM Collisions**: Standalone commands (`search`, `inspect`, `check-theme`, `check-contrast`, `test-rule`, `audit`) create independent temporary profile clones (`tempfile.mkdtemp`). Multiple agents can inspect different sites concurrently with zero cross-talk.
+* **Session Namespaces**: When multiple agents use persistent sessions, each agent must specify a distinct session name (e.g., `session --name tg start ...` or `export BROWSER_TOOLKIT_SESSION=tg`). Use `session list --toon` to discover active sessions across all agents.
+* **Thread-Safe Extension DB Writes**: All modifications to Stylus and Violentmonkey databases (`install-style`, `delete-style`, `install-script`, `delete-script`, `enable-*`) are protected by an inter-process file lock (`fcntl.flock`), preventing SQLite database corruption when agents install styles/scripts simultaneously.
+* **Safe Artifact Paths**: Screenshots and rule test outputs default to unique timestamped files in `/tmp/browser-toolkit/screenshots/` and `/tmp/browser-toolkit/rule-test/`. Agents should always consume the path reported in `saved_to` or `screenshot_*` rather than assuming a hardcoded filename.
+
+### I. Configuration & Defaults
 * **`config [--set-format toon|json|json-pretty|text] [key] [value]`**: Inspects or persists CLI defaults (e.g., `browser-toolkit config --set-format toon` writes to `/tmp/browser-toolkit/default_format`).
 
 ---

@@ -11,6 +11,7 @@ from .runner import AuditorRunner
 from .scanner import scan_directory
 from .session_client import (
     is_session_alive,
+    list_active_sessions,
     send_session_command,
     start_session,
     stop_session,
@@ -573,7 +574,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Command: screenshot
     shot_parser = subparsers.add_parser("screenshot", help="Capture page or element screenshot with hover/wait")
     shot_parser.add_argument("url", help="Target URL")
-    shot_parser.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "screenshot.png"), help="Output image file path (default: in /tmp/browser-toolkit)")
+    shot_parser.add_argument("--output", help="Output image file path (default: unique timestamped PNG in /tmp/browser-toolkit/screenshots/)")
     shot_parser.add_argument("--selector", help="Capture only this element")
     shot_parser.add_argument("--hover", help="Hover over selector before screenshot")
     shot_parser.add_argument("--wait", help="Wait for selector or millisecond timeout before screenshot")
@@ -848,47 +849,62 @@ def build_parser() -> argparse.ArgumentParser:
     session_parser = subparsers.add_parser("session", help="Manage persistent Playwright browser session")
     session_sub = session_parser.add_subparsers(dest="session_command", required=True)
 
-    # session start [url] [--no-profile] [--profile PATH] [--headful]
+    def add_session_name_arg(sub_p: argparse.ArgumentParser) -> None:
+        sub_p.add_argument("--name", "--session", help="Session identifier (default: 'default' or BROWSER_TOOLKIT_SESSION env var)")
+
+    # session list
+    s_list = session_sub.add_parser("list", help="List all running browser sessions")
+    add_output_args(s_list)
+
+    # session start [url] [--name NAME] [--no-profile] [--profile PATH] [--headful]
     s_start = session_sub.add_parser("start", help="Start background session daemon or navigate to URL")
     s_start.add_argument("url", nargs="?", help="Initial URL to navigate")
     s_start.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     s_start.add_argument("--profile", help="Path to custom profile")
     s_start.add_argument("--headful", action="store_true", help="Run with visible window")
+    add_session_name_arg(s_start)
     add_output_args(s_start)
 
-    # session status
+    # session status [--name NAME]
     s_status = session_sub.add_parser("status", help="Get status of active session daemon")
+    add_session_name_arg(s_status)
     add_output_args(s_status)
 
-    # session goto <url>
+    # session goto <url> [--name NAME]
     s_goto = session_sub.add_parser("goto", help="Navigate active session to a URL")
     s_goto.add_argument("url", help="Target URL")
+    add_session_name_arg(s_goto)
     add_output_args(s_goto)
 
-    # session eval <script>
+    # session eval <script> [--name NAME]
     s_eval = session_sub.add_parser("eval", help="Evaluate JavaScript expression in active session")
     s_eval.add_argument("script", help="JavaScript code to evaluate")
+    add_session_name_arg(s_eval)
     add_output_args(s_eval)
 
-    # session eval-many <scripts>
+    # session eval-many <scripts> [--name NAME]
     s_eval_many = session_sub.add_parser("eval-many", help="Evaluate batch of JavaScript expressions")
     s_eval_many.add_argument("scripts", help="JSON dictionary of scripts or path to JSON file")
+    add_session_name_arg(s_eval_many)
     add_output_args(s_eval_many)
 
-    # session interact --actions <json_or_file>
+    # session interact --actions <json_or_file> [--name NAME]
     s_interact = session_sub.add_parser("interact", help="Perform sequence of user actions in active session")
     s_interact.add_argument("--actions", required=True, help="JSON list of actions or path to JSON file")
+    add_session_name_arg(s_interact)
     add_output_args(s_interact)
 
-    # session screenshot [--output PATH] [--selector SEL] [--full-page]
+    # session screenshot [--output PATH] [--selector SEL] [--full-page] [--name NAME]
     s_shot = session_sub.add_parser("screenshot", help="Capture screenshot in active session")
-    s_shot.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "session_screenshot.png"), help="Output image file path")
+    s_shot.add_argument("--output", help="Output image file path (default: unique timestamped PNG in /tmp/browser-toolkit/screenshots/)")
     s_shot.add_argument("--selector", help="Capture only this element")
     s_shot.add_argument("--full-page", action="store_true", help="Capture full page height")
+    add_session_name_arg(s_shot)
     add_output_args(s_shot)
 
-    # session stop
+    # session stop [--name NAME]
     s_stop = session_sub.add_parser("stop", help="Stop background session daemon and close browser")
+    add_session_name_arg(s_stop)
     add_output_args(s_stop)
 
     return parser
@@ -933,9 +949,30 @@ def main() -> None:
 
     if args.command == "session":
         session_cmd = getattr(args, "session_command", None)
-        if session_cmd == "start":
+        session_name = getattr(args, "name", None) or getattr(args, "session", None)
+
+        if session_cmd == "list":
+            sessions = list_active_sessions()
+            data = {"total_sessions": len(sessions), "sessions": sessions}
+            output_result(
+                data,
+                args,
+                lambda d: print(
+                    f"Active sessions ({d['total_sessions']}):\n"
+                    + "\n".join(
+                        f"  • [{s.get('session_name', 'default')}] {s.get('url', 'none')} ('{s.get('title', '')}') - uptime: {s.get('uptime_seconds', 0)}s"
+                        for s in d.get("sessions", [])
+                    )
+                    if d["total_sessions"]
+                    else "No active sessions found."
+                ),
+            )
+            sys.exit(0)
+
+        elif session_cmd == "start":
             res = start_session(
                 url=getattr(args, "url", None),
+                session_name=session_name,
                 profile_path=getattr(args, "profile", None),
                 no_profile=getattr(args, "no_profile", False),
                 headful=getattr(args, "headful", False),
@@ -943,25 +980,25 @@ def main() -> None:
             output_result(
                 res,
                 args,
-                lambda d: print(f"Session active: URL={d.get('url')} Title='{d.get('title')}'"),
+                lambda d: print(f"Session '{d.get('session_name', 'default')}' active: URL={d.get('url')} Title='{d.get('title')}'"),
             )
             sys.exit(0 if res.get("status") == "ok" else 1)
 
         elif session_cmd == "status":
-            alive = is_session_alive()
+            alive = is_session_alive(session_name)
             if not alive:
-                res = {"status": "inactive", "message": "No active session"}
+                res = {"status": "inactive", "session_name": session_name or "default", "message": "No active session"}
             else:
-                res = send_session_command({"action": "status"})
+                res = send_session_command({"action": "status"}, session_name=session_name)
             output_result(
                 res,
                 args,
-                lambda d: print(f"Session status: {d.get('status')} | URL: {d.get('url', 'none')} | Uptime: {d.get('uptime_seconds', 0)}s"),
+                lambda d: print(f"Session status: {d.get('status')} [{d.get('session_name', 'default')}] | URL: {d.get('url', 'none')} | Uptime: {d.get('uptime_seconds', 0)}s"),
             )
             sys.exit(0 if alive else 1)
 
         elif session_cmd == "goto":
-            res = send_session_command({"action": "goto", "url": args.url})
+            res = send_session_command({"action": "goto", "url": args.url}, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -970,7 +1007,7 @@ def main() -> None:
             sys.exit(0 if res.get("status") == "ok" else 1)
 
         elif session_cmd == "eval":
-            res = send_session_command({"action": "eval", "script": args.script})
+            res = send_session_command({"action": "eval", "script": args.script}, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -983,7 +1020,7 @@ def main() -> None:
             if Path(script_raw).is_file():
                 script_raw = Path(script_raw).read_text(encoding="utf-8")
             scripts = json.loads(script_raw)
-            res = send_session_command({"action": "eval_many", "scripts": scripts})
+            res = send_session_command({"action": "eval_many", "scripts": scripts}, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -993,7 +1030,7 @@ def main() -> None:
 
         elif session_cmd == "interact":
             actions_list = parse_actions_arg(args.actions) or []
-            res = send_session_command({"action": "interact", "actions": actions_list})
+            res = send_session_command({"action": "interact", "actions": actions_list}, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -1007,7 +1044,7 @@ def main() -> None:
                 "output": args.output,
                 "selector": args.selector,
                 "full_page": args.full_page,
-            })
+            }, session_name=session_name)
             output_result(
                 res,
                 args,
@@ -1016,11 +1053,11 @@ def main() -> None:
             sys.exit(0 if res.get("status") == "ok" else 1)
 
         elif session_cmd == "stop":
-            res = stop_session()
+            res = stop_session(session_name)
             output_result(
                 res,
                 args,
-                lambda d: print("Session stopped."),
+                lambda d: print(f"Session '{session_name or 'default'}' stopped."),
             )
             sys.exit(0)
 

@@ -121,15 +121,22 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args2.value, "json")
 
     def test_session_subcommand_args(self):
-        args_start = self.parser.parse_args(["session", "start", "https://example.com", "--no-profile", "--toon"])
+        args_list = self.parser.parse_args(["session", "list", "--toon"])
+        self.assertEqual(args_list.command, "session")
+        self.assertEqual(args_list.session_command, "list")
+        self.assertTrue(args_list.toon)
+
+        args_start = self.parser.parse_args(["session", "start", "https://example.com", "--name", "worker_1", "--no-profile", "--toon"])
         self.assertEqual(args_start.command, "session")
         self.assertEqual(args_start.session_command, "start")
         self.assertEqual(args_start.url, "https://example.com")
+        self.assertEqual(args_start.name, "worker_1")
         self.assertTrue(args_start.no_profile)
         self.assertTrue(args_start.toon)
 
-        args_status = self.parser.parse_args(["session", "status"])
+        args_status = self.parser.parse_args(["session", "status", "--name", "worker_1"])
         self.assertEqual(args_status.session_command, "status")
+        self.assertEqual(args_status.name, "worker_1")
 
         args_goto = self.parser.parse_args(["session", "goto", "https://example.com/login"])
         self.assertEqual(args_goto.session_command, "goto")

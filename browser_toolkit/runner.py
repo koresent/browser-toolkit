@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from playwright.sync_api import sync_playwright
@@ -489,12 +490,17 @@ class AuditorRunner:
     def screenshot(
         self,
         url: str,
-        output_path: str | Path,
+        output_path: Optional[str | Path] = None,
         selector: Optional[str] = None,
         hover_selector: Optional[str] = None,
         wait_selector: Optional[str] = None,
         full_page: bool = False,
     ) -> Dict[str, Any]:
+        if not output_path:
+            shots_dir = Path(tempfile.gettempdir()) / "browser-toolkit" / "screenshots"
+            shots_dir.mkdir(parents=True, exist_ok=True)
+            output_path = shots_dir / f"screenshot_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.png"
+
         with ZenProfileContext(self.profile_path, use_profile=self.use_profile) as temp_profile:
             with sync_playwright() as p:
                 context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)

@@ -4,16 +4,19 @@ Directly inspects, exports, diffs, and manages installed styles and scripts
 from the user's Zen profile storage databases.
 """
 
+import fcntl
 import json
 import re
 import sqlite3
 import struct
+import tempfile
 import time
 import uuid
 import zipfile
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import snappy
 from dfindexeddb.indexeddb.firefox import definitions, gecko
@@ -21,6 +24,41 @@ from dfindexeddb.indexeddb.firefox.record import FileReader
 
 from .profile import find_zen_profile
 from .parser import parse_userstyle, parse_userscript
+
+LOCK_FILE = Path(tempfile.gettempdir()) / "browser-toolkit" / "ext_db.lock"
+
+
+@contextmanager
+def ext_db_lock(timeout: float = 30.0):
+    """Inter-process file lock protecting extension database writes."""
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    f = open(LOCK_FILE, "a+", encoding="utf-8")
+    start = time.time()
+    while True:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except (BlockingIOError, OSError):
+            if time.time() - start > timeout:
+                f.close()
+                raise TimeoutError("Timed out waiting for extension database lock")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
+
+
+def ext_db_locked(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator ensuring that method runs under the inter-process extension DB lock."""
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with ext_db_lock():
+            return func(*args, **kwargs)
+    return wrapper
 
 
 def encode_idb_number(val: float | int) -> bytes:
@@ -574,6 +612,7 @@ class ExtensionManager:
 
         return None
 
+    @ext_db_locked
     def set_style_enabled(self, target: str | int, enabled: bool) -> bool:
         """Enables or disables an installed Stylus style directly in SQLite storage."""
         db_path = self.get_stylus_db_path()
@@ -616,6 +655,7 @@ class ExtensionManager:
             return False
         return self.set_style_enabled(target, not style.enabled)
 
+    @ext_db_locked
     def delete_style(self, target: str | int) -> bool:
         """Deletes an installed style from Stylus SQLite storage."""
         db_path = self.get_stylus_db_path()
@@ -635,6 +675,7 @@ class ExtensionManager:
         finally:
             conn.close()
 
+    @ext_db_locked
     def install_or_update_style(self, style_path: Path | str, enabled: bool = True) -> Dict[str, Any]:
         """Installs or updates a .user.css file directly into Stylus SQLite storage."""
         p = Path(style_path).resolve()
@@ -755,6 +796,7 @@ class ExtensionManager:
 
         return None
 
+    @ext_db_locked
     def set_script_enabled(self, target: str | int, enabled: bool) -> bool:
         """Enables or disables an installed Violentmonkey script directly in SQLite storage."""
         db_path = self.get_violentmonkey_db_path()
@@ -798,6 +840,7 @@ class ExtensionManager:
             return False
         return self.set_script_enabled(target, not script.enabled)
 
+    @ext_db_locked
     def delete_script(self, target: str | int) -> bool:
         """Deletes an installed script from Violentmonkey SQLite storage."""
         db_path = self.get_violentmonkey_db_path()
@@ -825,6 +868,7 @@ class ExtensionManager:
         finally:
             conn.close()
 
+    @ext_db_locked
     def install_or_update_script(self, script_path: Path | str, enabled: bool = True) -> Dict[str, Any]:
         """Installs or updates a .user.js file directly into Violentmonkey SQLite storage."""
         p = Path(script_path).resolve()
