@@ -3,7 +3,7 @@ import json
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from .formatters import get_default_format, output_result, set_default_format
 from .profile import find_zen_profile
