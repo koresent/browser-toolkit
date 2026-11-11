@@ -49,9 +49,13 @@ class PageInteractor:
             raise RuntimeError(f"Failed to press key '{key}': {e}")
 
     def wait_for(self, selector: str, timeout: int = 5000) -> bool:
-        """Waits for an element to appear in DOM."""
+        """Waits for an element to appear in DOM or a millisecond duration if numeric."""
         try:
-            self.page.wait_for_selector(selector, timeout=timeout)
+            s_str = str(selector).strip()
+            if s_str.isdigit():
+                self.page.wait_for_timeout(int(s_str))
+                return True
+            self.page.wait_for_selector(s_str, timeout=timeout)
             return True
         except Exception as e:
             raise RuntimeError(f"Timed out waiting for '{selector}': {e}")

@@ -505,7 +505,11 @@ class AuditorRunner:
 
                     interactor = PageInteractor(page)
                     if wait_selector:
-                        interactor.wait_for(wait_selector)
+                        s_str = str(wait_selector).strip()
+                        if s_str.isdigit():
+                            page.wait_for_timeout(int(s_str))
+                        else:
+                            interactor.wait_for(s_str)
                     if hover_selector:
                         interactor.hover(hover_selector)
                         page.wait_for_timeout(500)

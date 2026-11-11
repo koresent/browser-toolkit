@@ -48,11 +48,14 @@ JS_SEARCH_DOM = """
             }
         }
 
-        // Match keyword in attributes/classes
+        // Match keyword in attributes/classes or fallback text
         if (keyword) {
             const cls = (typeof el.className === 'string' ? el.className : '').toLowerCase();
             const id = (el.id || '').toLowerCase();
             const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+            const placeholder = (el.getAttribute('placeholder') || '').toLowerCase();
+            const title = (el.getAttribute('title') || '').toLowerCase();
+            const dataTestId = (el.getAttribute('data-testid') || '').toLowerCase();
 
             if (cls.includes(keyword)) {
                 match = true;
@@ -63,6 +66,24 @@ JS_SEARCH_DOM = """
             } else if (aria.includes(keyword)) {
                 match = true;
                 reason = `aria-label contains "${keyword}"`;
+            } else if (placeholder.includes(keyword) || title.includes(keyword) || dataTestId.includes(keyword)) {
+                match = true;
+                reason = `Attribute contains "${keyword}"`;
+            } else if (!textQuery) {
+                const fullText = (el.textContent || '').toLowerCase();
+                if (fullText.includes(keyword)) {
+                    let childMatches = false;
+                    for (const ch of el.children) {
+                        if ((ch.textContent || '').toLowerCase().includes(keyword)) {
+                            childMatches = true;
+                            break;
+                        }
+                    }
+                    if (!childMatches) {
+                        match = true;
+                        reason = `Innermost text contains "${keyword}"`;
+                    }
+                }
             }
         }
 

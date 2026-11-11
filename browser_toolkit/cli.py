@@ -570,7 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
     shot_parser.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "screenshot.png"), help="Output image file path (default: in /tmp/browser-toolkit)")
     shot_parser.add_argument("--selector", help="Capture only this element")
     shot_parser.add_argument("--hover", help="Hover over selector before screenshot")
-    shot_parser.add_argument("--wait", help="Wait for selector before screenshot")
+    shot_parser.add_argument("--wait", help="Wait for selector or millisecond timeout before screenshot")
     shot_parser.add_argument("--full-page", action="store_true", help="Capture full page height")
     shot_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     shot_parser.add_argument("--profile", help="Path to custom profile")

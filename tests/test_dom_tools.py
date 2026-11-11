@@ -74,6 +74,7 @@ class TestDOMTools(unittest.TestCase):
         self.assertTrue(interactor.scroll("#scroll-box", y=150))
         self.assertTrue(interactor.scroll_into_view("#deep-btn"))
         self.assertTrue(interactor.click_text("Deep Target"))
+        self.assertTrue(interactor.wait_for("50"))
         page.close()
 
     def test_search_dom_innermost_and_wait(self):
@@ -145,6 +146,10 @@ class TestDOMTools(unittest.TestCase):
         matches_kw = page.evaluate(JS_SEARCH_DOM, {"keyword": "profile"})
         self.assertGreater(len(matches_kw), 0)
         self.assertIn("user-profile-badge", matches_kw[0]["className"])
+
+        # Search by keyword falling back to text
+        matches_fallback = page.evaluate(JS_SEARCH_DOM, {"keyword": "Explore Topics"})
+        self.assertGreater(len(matches_fallback), 0)
         page.close()
 
     def test_css_auditor(self):
