@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from browser_toolkit.browser_backend import (
+    apply_stealth_to_context,
     ensure_playwright_browser,
     safe_launch_browser,
     safe_launch_persistent_context,
@@ -10,6 +11,14 @@ from browser_toolkit.browser_backend import (
 
 
 class TestBrowserBackend(unittest.TestCase):
+    def test_apply_stealth_to_context(self):
+        mock_ctx = MagicMock()
+        apply_stealth_to_context(mock_ctx)
+        mock_ctx.add_init_script.assert_called_once()
+        script = mock_ctx.add_init_script.call_args[0][0]
+        self.assertIn("navigator", script)
+        self.assertIn("webdriver", script)
+
     def test_ensure_browser_when_exists(self):
         mock_playwright = MagicMock()
         mock_browser_type = MagicMock()

@@ -32,9 +32,10 @@ from .extension_manager import ExtensionManager
 from .sync_server import run_sync_server
 from .navigation import safe_goto
 from .browser_backend import (
+    apply_stealth_to_context,
     ensure_playwright_browser,
-    safe_launch_persistent_context,
     safe_launch_browser,
+    safe_launch_persistent_context,
 )
 
 
@@ -85,6 +86,7 @@ class AuditorRunner:
         else:
             browser = safe_launch_browser(p, headless=self.headless, **extra_kwargs)
             context = browser.new_context(viewport=vp, bypass_csp=bypass_csp)
+            apply_stealth_to_context(context)
             page = context.new_page()
 
         return context, page

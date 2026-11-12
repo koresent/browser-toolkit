@@ -66,7 +66,7 @@ def find_zen_profile(custom_path: Optional[str] = None) -> Optional[Path]:
 class ZenProfileContext:
     """
     Context manager that creates a temporary copy of the Zen profile (using CoW reflink if available)
-    removes lock and session files, and cleans up the temporary directory on exit.
+    removes lock, sync and background session restore files, and cleans up the temporary directory on exit.
     """
 
     def __init__(
@@ -106,38 +106,63 @@ class ZenProfileContext:
             shutil.copytree(src_profile, target_profile, symlinks=True, ignore_dangling_symlinks=True)
 
         self.cloned_profile_path = target_profile
-        self._sanitize_cloned_profile(target_profile)
+        self._sanitize_cloned_profile(target_profile, src_profile=src_profile)
         return self.cloned_profile_path
 
-    def _sanitize_cloned_profile(self, profile_dir: Path) -> None:
+    def _sanitize_cloned_profile(self, profile_dir: Path, src_profile: Optional[Path] = None) -> None:
         """
-        Removes lock files and previous session tabs so the browser starts cleanly
-        and does not clash with the running Zen instance.
+        Removes lock files, previous session tabs, sync state, and fixes NSS config
+        so the browser starts cleanly with authentic logins without clashing with the running Zen instance.
         """
-        # Lock files
+        # Lock files (handle symlinks properly even if dangling)
         for lock_name in ["lock", ".parentlock", "parent.lock"]:
             lock_file = profile_dir / lock_name
-            if lock_file.exists():
+            if lock_file.is_symlink() or lock_file.exists():
                 try:
                     lock_file.unlink()
                 except OSError:
                     pass
 
-        # Session tabs (to prevent opening 50 previous tabs during test)
-        sessionstore = profile_dir / "sessionstore.jsonlz4"
-        if sessionstore.exists():
+        # Session tabs (to prevent opening 50 previous tabs or Zen background sessions during test)
+        for sess_name in [
+            "sessionstore.jsonlz4",
+            "zen-sessions.jsonlz4",
+            "zen-live-folders.jsonlz4",
+            "sessionCheckpoints.json",
+        ]:
+            sess_file = profile_dir / sess_name
+            if sess_file.is_symlink() or sess_file.exists():
+                try:
+                    sess_file.unlink()
+                except OSError:
+                    pass
+
+        for backup_dir_name in ["sessionstore-backups", "zen-sessions-backup", "sessionstore-logs"]:
+            backup_dir = profile_dir / backup_dir_name
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+
+        # Fix NSS PKCS#11 configuration so NSS opens the cloned profile, not the live host profile
+        pkcs11_file = profile_dir / "pkcs11.txt"
+        if pkcs11_file.exists() and src_profile:
             try:
-                sessionstore.unlink()
+                content = pkcs11_file.read_text(encoding="utf-8")
+                updated = content.replace(str(src_profile), str(profile_dir))
+                pkcs11_file.write_text(updated, encoding="utf-8")
             except OSError:
                 pass
 
-        for backup_dir_name in ["sessionstore-backups", "zen-sessions-backup"]:
-            backup_dir = profile_dir / backup_dir_name
-            if backup_dir.exists():
-                try:
-                    shutil.rmtree(backup_dir, ignore_errors=True)
-                except OSError:
-                    pass
+        # Strip Mozilla Accounts / Firefox Sync credentials so the clone never synchronizes with Mozilla
+        signed_in = profile_dir / "signedInUser.json"
+        if signed_in.is_symlink() or signed_in.exists():
+            try:
+                signed_in.unlink()
+            except OSError:
+                pass
+
+        weave_dir = profile_dir / "weave"
+        if weave_dir.exists():
+            shutil.rmtree(weave_dir, ignore_errors=True)
 
         # Strip Stylus storage in the temporary clone so candidate CSS can be tested without conflicts.
         if self.clean_styles:
@@ -147,7 +172,7 @@ class ZenProfileContext:
                     ext_storage = db_file.parent.parent
                     shutil.rmtree(ext_storage, ignore_errors=True)
 
-        # Inject preferences to disable crash popups, default browser checks, etc.
+        # Inject preferences to disable crash popups, default browser checks, sync, webdriver flags, etc.
         user_js = profile_dir / "user.js"
         prefs = (
             "\n"
@@ -156,6 +181,15 @@ class ZenProfileContext:
             "user_pref('toolkit.startup.max_resumed_crashes', -1);\n"
             "user_pref('browser.tabs.warnOnClose', false);\n"
             "user_pref('datareporting.policy.dataSubmissionEnabled', false);\n"
+            "user_pref('identity.fxaccounts.enabled', false);\n"
+            "user_pref('services.sync.engine.tabs', false);\n"
+            "user_pref('services.sync.engine.bookmarks', false);\n"
+            "user_pref('services.sync.engine.history', false);\n"
+            "user_pref('services.sync.engine.passwords', false);\n"
+            "user_pref('services.sync.engine.prefs', false);\n"
+            "user_pref('services.sync.engine.addons', false);\n"
+            "user_pref('dom.webdriver.enabled', false);\n"
+            "user_pref('marionette.enabled', false);\n"
         )
         try:
             with open(user_js, "a", encoding="utf-8") as f:

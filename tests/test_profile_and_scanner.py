@@ -48,6 +48,33 @@ class TestProfileAndScanner(unittest.TestCase):
                 self.assertFalse((clone / "storage" / "default" / "moz-extension+++abc-stylus").exists())
                 self.assertTrue((clone / "storage" / "default" / "moz-extension+++def-vm").exists())
 
+    def test_zen_profile_sanitization_nss_and_sessions(self):
+        with tempfile.TemporaryDirectory() as src_dir:
+            src = Path(src_dir)
+            (src / "prefs.js").write_text("", encoding="utf-8")
+            (src / "cookies.sqlite").write_text("cookie-data", encoding="utf-8")
+            (src / "zen-sessions.jsonlz4").write_text("session", encoding="utf-8")
+            (src / "zen-live-folders.jsonlz4").write_text("folders", encoding="utf-8")
+            (src / "signedInUser.json").write_text("sync-auth", encoding="utf-8")
+            (src / "pkcs11.txt").write_text(f"parameters=configdir='sql:{src}'\n", encoding="utf-8")
+            dangling_lock = src / "lock"
+            dangling_lock.symlink_to("127.0.0.1:+999999")
+
+            with ZenProfileContext(str(src), use_profile=True) as clone:
+                self.assertIsNotNone(clone)
+                # Cookies and authentic auth remain intact
+                self.assertTrue((clone / "cookies.sqlite").exists())
+                # Zen session files and sync must be removed
+                self.assertFalse((clone / "zen-sessions.jsonlz4").exists())
+                self.assertFalse((clone / "zen-live-folders.jsonlz4").exists())
+                self.assertFalse((clone / "signedInUser.json").exists())
+                # Dangling lock must be removed
+                self.assertFalse((clone / "lock").is_symlink())
+                # pkcs11.txt must point to the clone directory, never the src directory
+                pkcs_content = (clone / "pkcs11.txt").read_text(encoding="utf-8")
+                self.assertIn(str(clone), pkcs_content)
+                self.assertNotIn(str(src), pkcs_content)
+
     def test_scan_directory(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
