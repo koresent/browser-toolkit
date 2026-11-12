@@ -80,8 +80,8 @@ Compose tools dynamically according to the user's goal:
 ### B. Color & Theme Engineering
 * **`extract-palette <url> --toon`**  
   Extracts native CSS custom properties (`--color-...`, `--bg-...`) and clusters background, text, and border colors by DOM frequency.
-* **`extract-colors <target> [--output PATH]`**  
-  Extracts a minimal CSS color skeleton from a stylesheet or URL, discarding layout, grid, and font rules.
+* **`extract-colors [target] [--output PATH] [--clipboard] --toon`**  
+  Extracts a minimal CSS color skeleton from a stylesheet file, live URL, or piped standard input (`-`), ranking color swatches by frequency and optionally copying the skeleton to the system clipboard (`-c`).
 * **`test-rule <url> --css <rule> --toon`**  
   Tests candidate CSS rule impact on live page without page reload. Flags elements covering >25% viewport and saves before/after screenshots to `/tmp/browser-toolkit/rule-test/`.
 * **`check-theme <url> [--css <path>] [--theme dark|light] [--exclude-colors COLORS] --toon`**  

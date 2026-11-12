@@ -1,13 +1,16 @@
 """
-CSS Color Extractor: Port and enhancement of Extract-ThemeColors-Universal.ps1.
-Extracts strictly hardcoded color definitions from local CSS files or live website stylesheets,
-filtering out non-color properties and var() usages to produce a clean color skeleton for theming.
+CSS Color Extractor: Port and enhancement of Extract-ThemeColors-Universal.ps1 and ecss.
+Extracts strictly hardcoded color definitions from local CSS files, stdin, or live website stylesheets,
+filtering out non-color properties and var() usages to produce a clean color skeleton and swatch counts for theming.
 """
 
+from collections import Counter
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import List, Optional
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional
 from playwright.sync_api import sync_playwright
 
 from .profile import ZenProfileContext
@@ -24,6 +27,108 @@ COLOR_PROP_REGEX = re.compile(
     re.IGNORECASE,
 )
 
+SWATCH_HEX_REGEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+SWATCH_RGB_REGEX = re.compile(r"rgba?\(\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})")
+
+NAMED_COLORS = {
+    "black": "#000000",
+    "white": "#ffffff",
+    "red": "#ff0000",
+    "green": "#008000",
+    "blue": "#0000ff",
+    "yellow": "#ffff00",
+    "gray": "#808080",
+    "grey": "#808080",
+}
+
+
+def normalize_swatch_color(token: str) -> Optional[str]:
+    """Converts #RGB / #RRGGBB / #RRGGBBAA / rgb(...) / named color into a normalized #rrggbb string."""
+    token = token.strip().lower()
+    if token in NAMED_COLORS:
+        return NAMED_COLORS[token]
+    if token.startswith("#"):
+        hex_part = token[1:]
+        if len(hex_part) in (3, 4):
+            r, g, b = hex_part[0] * 2, hex_part[1] * 2, hex_part[2] * 2
+            return f"#{r}{g}{b}".lower()
+        if len(hex_part) in (6, 8):
+            return f"#{hex_part[:6]}".lower()
+        return None
+    m = SWATCH_RGB_REGEX.match(token)
+    if m:
+        r, g, b = (max(0, min(255, int(m.group(i)))) for i in (1, 2, 3))
+        return f"#{r:02x}{g:02x}{b:02x}"
+    return None
+
+
+def extract_color_swatches(css_text: str) -> List[Dict[str, Any]]:
+    """Returns list of swatches sorted by frequency."""
+    counts: Counter[str] = Counter()
+    norm_map: Dict[str, str] = {}
+
+    for m in SWATCH_HEX_REGEX.finditer(css_text):
+        raw = m.group(0)
+        norm = normalize_swatch_color(raw)
+        if norm:
+            low = raw.lower()
+            counts[low] += 1
+            norm_map[low] = norm
+
+    for m in SWATCH_RGB_REGEX.finditer(css_text):
+        raw = m.group(0) + ")"
+        norm = normalize_swatch_color(raw)
+        if norm:
+            counts[raw] += 1
+            norm_map[raw] = norm
+
+    return [
+        {"token": tok, "hex": norm_map[tok], "count": cnt}
+        for tok, cnt in counts.most_common()
+    ]
+
+
+def copy_to_clipboard(content: str) -> bool:
+    """Copies text to system clipboard via Wayland wl-copy, X11 xclip or xsel."""
+    payload = content.encode("utf-8")
+    if shutil.which("wl-copy"):
+        try:
+            subprocess.run(
+                ["wl-copy"],
+                input=payload,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return True
+        except (subprocess.SubprocessError, OSError):
+            pass
+    if shutil.which("xclip"):
+        try:
+            subprocess.run(
+                ["xclip", "-selection", "clipboard"],
+                input=payload,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return True
+        except (subprocess.SubprocessError, OSError):
+            pass
+    if shutil.which("xsel"):
+        try:
+            subprocess.run(
+                ["xsel", "--clipboard", "--input"],
+                input=payload,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+            return True
+        except (subprocess.SubprocessError, OSError):
+            pass
+    return False
+
 
 def filter_declarations(block_content: str) -> List[str]:
     declarations = block_content.split(";")
@@ -36,14 +141,11 @@ def filter_declarations(block_content: str) -> List[str]:
 
         prop, val = [p.strip() for p in trimmed.split(":", 1)]
 
-        # Rule 1: Skip if it references var(), as it is a usage rather than a hardcoded value
+        # Skip if it references var(), as it is a usage rather than a hardcoded value
         if "var(" in val.lower():
             continue
 
-        # Rule 2: Check for explicit hardcoded color values
         has_color = bool(COLOR_VAL_REGEX.search(val))
-
-        # Rule 3: Check if property is inherently a color property (excluding image urls)
         is_color_prop = bool(COLOR_PROP_REGEX.search(prop))
 
         if has_color or (is_color_prop and "url(" not in val.lower()):
@@ -53,7 +155,6 @@ def filter_declarations(block_content: str) -> List[str]:
 
 
 def parse_css_structure(css_content: str) -> str:
-    # Remove comments
     cleaned = re.sub(r"/\*.*?\*/", "", css_content, flags=re.DOTALL)
 
     output: List[str] = []
@@ -76,7 +177,6 @@ def parse_css_structure(css_content: str) -> str:
                 buffer.clear()
 
                 if "{" in block:
-                    # Recursive for nested at-rules (@media, @supports)
                     nested = parse_css_structure(block)
                     if nested.strip():
                         indented = "\n".join(f"    {line}" for line in nested.splitlines() if line.strip())
@@ -95,20 +195,23 @@ def parse_css_structure(css_content: str) -> str:
 
 
 def extract_colors_from_file_or_url(
-    target: str,
+    target: Optional[str] = "-",
     output_path: Optional[str | Path] = None,
     profile_path: Optional[str] = None,
     use_profile: bool = True,
-) -> str:
+    clipboard: bool = False,
+) -> Dict[str, Any]:
     """
-    Accepts either a local .css file path OR a website URL.
-    If URL: opens the page via Playwright Gecko and harvests all stylesheet rules.
-    Extracts the distilled color skeleton and writes to output_path if specified.
+    Accepts a local .css file path, a website URL, or '-' to read from stdin.
+    Extracts strictly hardcoded color declarations and swatch frequency stats.
+    Optionally copies to system clipboard and writes to output_path.
     """
-    target_path = Path(target)
-    if target_path.exists() and target_path.is_file():
-        raw_css = target_path.read_text(encoding="utf-8", errors="replace")
-    elif target.startswith(("http://", "https://")):
+    target_str = (target or "-").strip()
+
+    if target_str == "-" or not target_str:
+        raw_css = sys.stdin.read()
+        target_desc = "stdin"
+    elif target_str.startswith(("http://", "https://")):
         with ZenProfileContext(profile_path, use_profile=use_profile) as temp_prof:
             with sync_playwright() as p:
                 launch_kwargs = {"headless": True}
@@ -121,7 +224,7 @@ def extract_colors_from_file_or_url(
                     page = ctx.new_page()
 
                 try:
-                    safe_goto(page, target, wait_until="domcontentloaded", timeout=30000)
+                    safe_goto(page, target_str, wait_until="domcontentloaded", timeout=30000)
                     page.wait_for_timeout(2000)
                     raw_css = page.evaluate(
                         """() => {
@@ -138,14 +241,30 @@ def extract_colors_from_file_or_url(
                     )
                 finally:
                     ctx.close()
+        target_desc = target_str
     else:
-        raise FileNotFoundError(f"Target is neither an existing file nor a valid URL: {target}")
+        target_path = Path(target_str).resolve()
+        if not target_path.exists() or not target_path.is_file():
+            raise FileNotFoundError(f"Target is neither an existing file nor a valid URL: {target_str}")
+        raw_css = target_path.read_text(encoding="utf-8", errors="replace")
+        target_desc = str(target_path)
 
     result = parse_css_structure(raw_css)
+    swatches = extract_color_swatches(result)
+
+    copied = False
+    if clipboard and result:
+        copied = copy_to_clipboard(result)
 
     if output_path:
         out = Path(output_path).resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(result, encoding="utf-8")
 
-    return result
+    return {
+        "target": target_desc,
+        "total_swatches": len(swatches),
+        "swatches": swatches,
+        "copied_to_clipboard": copied,
+        "skeleton": result,
+    }

@@ -77,6 +77,20 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.theme, "dark")
         self.assertEqual(args.css, "style.css")
 
+    def test_extract_colors_subcommand_args(self):
+        args_default = self.parser.parse_args(["extract-colors"])
+        self.assertEqual(args_default.command, "extract-colors")
+        self.assertEqual(args_default.target, "-")
+        self.assertFalse(args_default.clipboard)
+        self.assertIsNone(args_default.output)
+
+        args_full = self.parser.parse_args(["extract-colors", "style.css", "-c", "-o", "out.css", "--toon"])
+        self.assertEqual(args_full.command, "extract-colors")
+        self.assertEqual(args_full.target, "style.css")
+        self.assertTrue(args_full.clipboard)
+        self.assertEqual(args_full.output, "out.css")
+        self.assertTrue(args_full.toon)
+
     def test_ext_subcommands_args(self):
         # ext status
         args = self.parser.parse_args(["ext", "status", "--toon"])

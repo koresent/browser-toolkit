@@ -520,12 +520,18 @@ class AuditorRunner:
                 finally:
                     context.close()
 
-    def extract_css_colors(self, target: str, output_path: Optional[str | Path] = None) -> str:
+    def extract_css_colors(
+        self,
+        target: Optional[str] = "-",
+        output_path: Optional[str | Path] = None,
+        clipboard: bool = False,
+    ) -> Dict[str, Any]:
         return extract_colors_from_file_or_url(
             target=target,
             output_path=output_path,
             profile_path=self.profile_path,
             use_profile=self.use_profile,
+            clipboard=clipboard,
         )
 
     def check_contrast(self, url: str, css_path: Optional[str | Path] = None) -> Dict[str, Any]:

@@ -2,7 +2,14 @@ import unittest
 from playwright.sync_api import sync_playwright
 
 from browser_toolkit.contrast_checker import JS_CONTRAST_ANALYSIS
-from browser_toolkit.css_color_extractor import filter_declarations, parse_css_structure
+from browser_toolkit.css_color_extractor import (
+    copy_to_clipboard,
+    extract_color_swatches,
+    extract_colors_from_file_or_url,
+    filter_declarations,
+    normalize_swatch_color,
+    parse_css_structure,
+)
 from browser_toolkit.palette_extractor import JS_EXTRACT_PAGE_PALETTE
 from browser_toolkit.palettes import GRUVBOX_PALETTES, format_gruvbox_css, get_gruvbox
 
@@ -80,6 +87,42 @@ class TestColorsAndPalettes(unittest.TestCase):
         self.assertIn(".header .logo {", parsed)
         self.assertIn("fill: #ff0000;", parsed)
         self.assertNotIn("width: 120px;", parsed)
+
+    def test_normalize_swatch_color(self):
+        self.assertEqual(normalize_swatch_color("#fff"), "#ffffff")
+        self.assertEqual(normalize_swatch_color("#282828"), "#282828")
+        self.assertEqual(normalize_swatch_color("rgb(0, 0, 0)"), "#000000")
+        self.assertEqual(normalize_swatch_color("red"), "#ff0000")
+        self.assertIsNone(normalize_swatch_color("unknown-color-keyword"))
+
+    def test_extract_color_swatches(self):
+        css = """
+        body { background: #282828; color: #ebdbb2; }
+        a { color: #ebdbb2; border-color: rgb(235, 219, 178); }
+        div { background: #282828; fill: red; }
+        """
+        swatches = extract_color_swatches(css)
+        self.assertGreater(len(swatches), 0)
+        # Check that top color has highest count
+        top = swatches[0]
+        self.assertIn("token", top)
+        self.assertIn("hex", top)
+        self.assertIn("count", top)
+        self.assertGreaterEqual(top["count"], swatches[-1]["count"])
+
+    def test_extract_colors_from_file_or_url_stdin(self):
+        import io
+        from unittest.mock import patch
+
+        fake_stdin = io.StringIO("body { color: #ebdbb2; margin: 10px; }")
+        with patch("sys.stdin", fake_stdin), patch("browser_toolkit.css_color_extractor.copy_to_clipboard") as mock_clip:
+            mock_clip.return_value = True
+            result = extract_colors_from_file_or_url("-", clipboard=True)
+            self.assertEqual(result["target"], "stdin")
+            self.assertIn("color: #ebdbb2;", result["skeleton"])
+            self.assertNotIn("margin: 10px;", result["skeleton"])
+            self.assertTrue(result["copied_to_clipboard"])
+            self.assertGreater(result["total_swatches"], 0)
 
 
 class TestColorAnalysisInBrowser(unittest.TestCase):

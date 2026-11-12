@@ -658,11 +658,13 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.add_argument("--output", default=str(TEMP_TOOLKIT_DIR / "preview.png"), help="Path to save preview screenshot (default: in /tmp/browser-toolkit)")
 
     # Command: extract-colors
-    extract_colors_parser = subparsers.add_parser("extract-colors", help="Extract pure color skeleton from CSS file or URL (port of Extract-ThemeColors)")
-    extract_colors_parser.add_argument("target", help="Local .css file path OR website URL")
-    extract_colors_parser.add_argument("--output", help="Path to write output CSS skeleton")
+    extract_colors_parser = subparsers.add_parser("extract-colors", help="Extract pure color skeleton from CSS file, URL, or stdin")
+    extract_colors_parser.add_argument("target", nargs="?", default="-", help="Local .css file path, website URL, or '-' for stdin (default: '-')")
+    extract_colors_parser.add_argument("--output", "-o", help="Path to write output CSS skeleton")
+    extract_colors_parser.add_argument("-c", "--clipboard", action="store_true", help="Copy extracted CSS colors to system clipboard")
     extract_colors_parser.add_argument("--no-profile", action="store_true", help="Do not clone Zen profile")
     extract_colors_parser.add_argument("--profile", help="Path to custom profile")
+    add_output_args(extract_colors_parser)
 
     # Command: check-responsive
     resp_parser = subparsers.add_parser("check-responsive", help="Audit responsive layout (horizontal overflow, touch targets, text clipping)")
@@ -1353,11 +1355,28 @@ def main() -> None:
         )
 
     elif args.command == "extract-colors":
-        res = runner.extract_css_colors(args.target, output_path=args.output)
-        if args.output:
-            print(f"Extracted color skeleton saved to: {args.output} ({len(res)} bytes)")
-        else:
-            output_result({"target": args.target, "skeleton": res}, args, lambda d: print(d["skeleton"]))
+        res = runner.extract_css_colors(
+            args.target,
+            output_path=args.output,
+            clipboard=getattr(args, "clipboard", False),
+        )
+
+        def print_extract_colors_summary(d: Dict[str, Any]) -> None:
+            if d.get("copied_to_clipboard"):
+                sys.stderr.write("Done! Extracted CSS colors copied to clipboard.\n")
+            if args.output:
+                print(f"Extracted color skeleton saved to: {args.output} ({len(d.get('skeleton', ''))} bytes)")
+            else:
+                print(d.get("skeleton", ""))
+            swatches = d.get("swatches", [])
+            if swatches and sys.stdout.isatty() and not args.output:
+                print(f"\nColor Swatches ({d.get('total_swatches', len(swatches))} total):")
+                for sw in swatches[:15]:
+                    print(f"  • {sw['token']} ({sw['hex']}): {sw['count']} occurrences")
+                if len(swatches) > 15:
+                    print(f"  ... and {len(swatches) - 15} more colors.")
+
+        output_result(res, args, print_extract_colors_summary)
 
     elif args.command == "check-responsive":
         viewports_list = None
@@ -1555,7 +1574,7 @@ def main() -> None:
         elif action == "install-script":
             res = runner.ext_install_or_update_script(args.file, enabled=not args.disabled)
             act = "Updated" if res["action"] == "updated" else "Installed"
-            output_result(res, args, lambda d: print(f"Script successfully {act} in Violentmonkey: {res[name]} (ID: {res[id]}, Status: {'Enabled' if res['enabled'] else 'Disabled'})"))
+            output_result(res, args, lambda d: print(f"Script successfully {act} in Violentmonkey: {res['name']} (ID: {res['id']}, Status: {'Enabled' if res['enabled'] else 'Disabled'})"))
 
 
 if __name__ == "__main__":
