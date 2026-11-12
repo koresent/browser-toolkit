@@ -18,6 +18,15 @@ from .session_client import (
 )
 
 
+def _safe_is_file(path_str: Optional[str]) -> bool:
+    if not path_str:
+        return False
+    try:
+        return Path(path_str).is_file()
+    except OSError:
+        return False
+
+
 def print_style_summary(report: Dict[str, Any]) -> None:
     audit = report.get("css_audit", {})
     total = audit.get("total_selectors", 0)
@@ -1105,7 +1114,7 @@ def main() -> None:
 
         elif session_cmd == "eval-many":
             script_raw = args.scripts.strip()
-            if Path(script_raw).is_file():
+            if _safe_is_file(script_raw):
                 script_raw = Path(script_raw).read_text(encoding="utf-8")
             scripts = json.loads(script_raw)
             res = send_session_command({
@@ -1123,7 +1132,7 @@ def main() -> None:
         elif session_cmd == "inspect":
             props_list = [p.strip() for p in args.properties.split(",") if p.strip()] if args.properties else None
             actions_list = parse_actions_arg(args.actions)
-            css_val = str(Path(args.css).resolve()) if args.css and Path(args.css).is_file() else args.css
+            css_val = str(Path(args.css).resolve()) if _safe_is_file(args.css) else args.css
             res = send_session_command({
                 "action": "inspect",
                 "selector": args.selector,
@@ -1154,7 +1163,7 @@ def main() -> None:
 
         elif session_cmd == "inject-css":
             css_arg = args.css
-            if Path(css_arg).is_file():
+            if _safe_is_file(css_arg):
                 css_arg = str(Path(css_arg).resolve())
             res = send_session_command({
                 "action": "inject_css",
@@ -1166,7 +1175,7 @@ def main() -> None:
 
         elif session_cmd == "check-theme":
             css_arg = getattr(args, "css", None)
-            if css_arg and Path(css_arg).is_file():
+            if _safe_is_file(css_arg):
                 css_arg = str(Path(css_arg).resolve())
             excl = [c.strip() for c in args.exclude_colors.split(",") if c.strip()] if getattr(args, "exclude_colors", None) else None
             res = send_session_command({
@@ -1181,9 +1190,8 @@ def main() -> None:
 
         elif session_cmd == "inject-script":
             payload: Dict[str, Any] = {"action": "inject_script", "settle_ms": args.settle_ms}
-            p_js = Path(args.file)
-            if p_js.is_file():
-                payload["file"] = str(p_js.resolve())
+            if _safe_is_file(args.file):
+                payload["file"] = str(Path(args.file).resolve())
             else:
                 payload["raw_js"] = args.file
             res = send_session_command(payload, session_name=session_name)

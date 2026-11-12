@@ -1,6 +1,6 @@
 import unittest
 
-from browser_toolkit.cli import build_parser
+from browser_toolkit.cli import _safe_is_file, build_parser
 
 
 class TestCLI(unittest.TestCase):
@@ -229,6 +229,13 @@ class TestCLI(unittest.TestCase):
         args_root = self.parser.parse_args(["--toon", "profile-info"])
         self.assertEqual(args_root.command, "profile-info")
         self.assertTrue(args_root.toon)
+
+    def test_safe_is_file(self):
+        self.assertFalse(_safe_is_file(None))
+        self.assertFalse(_safe_is_file(""))
+        long_css = "body { color: red; }\n" * 50
+        self.assertFalse(_safe_is_file(long_css))
+        self.assertTrue(_safe_is_file(__file__))
 
 
 if __name__ == "__main__":
