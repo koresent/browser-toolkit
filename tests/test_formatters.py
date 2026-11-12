@@ -55,11 +55,12 @@ class TestFormatters(unittest.TestCase):
         self.assertIn('  "type": "userstyle"', rendered)
 
     def test_resolve_format_flags(self):
-        self.assertEqual(resolve_format(DummyArgs(toon=True)), "toon")
-        self.assertEqual(resolve_format(DummyArgs(json=True)), "json")
-        self.assertEqual(resolve_format(DummyArgs(format="toon")), "toon")
-        self.assertEqual(resolve_format(DummyArgs(format="json-pretty")), "json-pretty")
-        self.assertEqual(resolve_format(DummyArgs()), "text")
+        with patch("browser_toolkit.formatters.get_default_format", return_value=None):
+            self.assertEqual(resolve_format(DummyArgs(toon=True)), "toon")
+            self.assertEqual(resolve_format(DummyArgs(json=True)), "json")
+            self.assertEqual(resolve_format(DummyArgs(format="toon")), "toon")
+            self.assertEqual(resolve_format(DummyArgs(format="json-pretty")), "json-pretty")
+            self.assertEqual(resolve_format(DummyArgs()), "text")
 
     def test_resolve_format_env_var(self):
         with patch.dict(os.environ, {"BROWSER_TOOLKIT_FORMAT": "toon"}):
