@@ -858,6 +858,13 @@ def build_parser() -> argparse.ArgumentParser:
     inst_script_p.add_argument("--disabled", action="store_true", help="Install as disabled")
     inst_script_p.add_argument("--profile", help="Path to custom profile")
 
+    # ext sync
+    sync_p = ext_subparsers.add_parser("sync", help="Synchronize all local styles and scripts into Stylus and Violentmonkey databases")
+    sync_p.add_argument("--styles-dir", help="Path to userstyles directory (default: ~/Projects/personal/userstyles)")
+    sync_p.add_argument("--scripts-dir", help="Path to userscripts directory (default: ~/Projects/personal/userscripts)")
+    sync_p.add_argument("--profile", help="Path to custom profile")
+    add_output_args(sync_p)
+
     # Command: profile-info
     prof_p = subparsers.add_parser("profile-info", help="Show detected Zen profile location")
     add_output_args(prof_p)
@@ -1583,6 +1590,25 @@ def main() -> None:
             res = runner.ext_install_or_update_script(args.file, enabled=not args.disabled)
             act = "Updated" if res["action"] == "updated" else "Installed"
             output_result(res, args, lambda d: print(f"Script successfully {act} in Violentmonkey: {res['name']} (ID: {res['id']}, Status: {'Enabled' if res['enabled'] else 'Disabled'})"))
+
+        elif action == "sync":
+            res = runner.ext_sync(args.styles_dir, args.scripts_dir)
+
+            def print_sync(d: Dict[str, Any]) -> None:
+                st = d["styles"]
+                sc = d["scripts"]
+                print(f"UserStyles Sync: {st['in_sync']} in sync, {len(st['installed'])} installed, {len(st['updated'])} updated (of {st['total']} local)")
+                for item in st["installed"]:
+                    print(f"  + Installed: {item['name']} ({item['file']})")
+                for item in st["updated"]:
+                    print(f"  ~ Updated:   {item['name']} ({item['file']})")
+                print(f"UserScripts Sync: {sc['in_sync']} in sync, {len(sc['installed'])} installed, {len(sc['updated'])} updated (of {sc['total']} local)")
+                for item in sc["installed"]:
+                    print(f"  + Installed: {item['name']} ({item['file']})")
+                for item in sc["updated"]:
+                    print(f"  ~ Updated:   {item['name']} ({item['file']})")
+
+            output_result(res, args, print_sync)
 
 
 if __name__ == "__main__":

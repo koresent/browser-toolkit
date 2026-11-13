@@ -173,6 +173,59 @@ class TestExtensionManager(unittest.TestCase):
             self.assertTrue(tmp_mgr.delete_script(res["id"]))
             self.assertIsNone(tmp_mgr.find_script("Unit Test Script"))
 
+    def test_bulk_sync(self):
+        """Tests bulk synchronization of styles and scripts on isolated profile copy."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            shutil.copy2(self.mgr.profile_dir / "prefs.js", tmp / "prefs.js")
+            shutil.copytree(self.mgr.profile_dir / "storage", tmp / "storage")
+
+            tmp_mgr = ExtensionManager(profile_path=tmp)
+
+            styles_dir = tmp / "userstyles"
+            styles_dir.mkdir()
+            test_css = styles_dir / "bulk_test.user.css"
+            test_css.write_text(
+                "/* ==UserStyle==\n@name Bulk Sync Style\n@version 1.0.0\n==/UserStyle== */\n@-moz-document domain(\"sync.test\") { body { background: #282828; } }"
+            )
+
+            scripts_dir = tmp / "userscripts"
+            scripts_dir.mkdir()
+            test_js = scripts_dir / "bulk_test.user.js"
+            test_js.write_text(
+                "// ==UserScript==\n// @name Bulk Sync Script\n// @version 1.0.0\n// @match *://sync.test/*\n// ==/UserScript==\nconsole.log(\"sync test\");"
+            )
+
+            # First run: both should be installed as new
+            res = tmp_mgr.sync(styles_dir=styles_dir, scripts_dir=scripts_dir)
+            self.assertEqual(res["status"], "ok")
+            self.assertEqual(len(res["styles"]["installed"]), 1)
+            self.assertEqual(len(res["scripts"]["installed"]), 1)
+            self.assertEqual(res["styles"]["installed"][0]["name"], "Bulk Sync Style")
+            self.assertEqual(res["scripts"]["installed"][0]["name"], "Bulk Sync Script")
+
+            # Second run without changes: in_sync should be 1, installed/updated 0
+            res2 = tmp_mgr.sync(styles_dir=styles_dir, scripts_dir=scripts_dir)
+            self.assertEqual(res2["styles"]["in_sync"], 1)
+            self.assertEqual(len(res2["styles"]["installed"]), 0)
+            self.assertEqual(len(res2["styles"]["updated"]), 0)
+            self.assertEqual(res2["scripts"]["in_sync"], 1)
+            self.assertEqual(len(res2["scripts"]["installed"]), 0)
+            self.assertEqual(len(res2["scripts"]["updated"]), 0)
+
+            # Modify both files: should be updated
+            test_css.write_text(
+                "/* ==UserStyle==\n@name Bulk Sync Style\n@version 2.0.0\n==/UserStyle== */\n@-moz-document domain(\"sync.test\") { body { background: #32302f; } }"
+            )
+            test_js.write_text(
+                "// ==UserScript==\n// @name Bulk Sync Script\n// @version 2.0.0\n// @match *://sync.test/*\n// ==/UserScript==\nconsole.log(\"updated sync test\");"
+            )
+            res3 = tmp_mgr.sync(styles_dir=styles_dir, scripts_dir=scripts_dir)
+            self.assertEqual(len(res3["styles"]["updated"]), 1)
+            self.assertEqual(len(res3["scripts"]["updated"]), 1)
+            self.assertEqual(res3["styles"]["updated"][0]["name"], "Bulk Sync Style")
+            self.assertEqual(res3["scripts"]["updated"][0]["name"], "Bulk Sync Script")
+
 
 if __name__ == "__main__":
     unittest.main()

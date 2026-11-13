@@ -922,6 +922,14 @@ class AuditorRunner:
         mgr = self.get_extension_manager()
         return mgr.diff_scripts(local_dir)
 
+    def ext_sync(
+        self,
+        styles_dir: Optional[str | Path] = None,
+        scripts_dir: Optional[str | Path] = None,
+    ) -> Dict[str, Any]:
+        mgr = self.get_extension_manager()
+        return mgr.sync(styles_dir, scripts_dir)
+
     def ext_build_stylus_backup(self, styles_dir: str | Path, output_file: str | Path) -> int:
         mgr = self.get_extension_manager()
         return mgr.build_stylus_backup_json(styles_dir, output_file)

@@ -1019,3 +1019,67 @@ class ExtensionManager:
                 return {"id": new_id, "name": name, "action": "created", "enabled": enabled}
         finally:
             conn.close()
+
+    def sync(
+        self,
+        styles_dir: Optional[Path | str] = None,
+        scripts_dir: Optional[Path | str] = None,
+    ) -> Dict[str, Any]:
+        """Synchronizes local styles and scripts into Stylus and Violentmonkey databases.
+
+        Installs brand-new files and updates modified files.
+        """
+        s_dir = Path(styles_dir).resolve() if styles_dir else Path.home() / "Projects" / "personal" / "userstyles"
+        sc_dir = Path(scripts_dir).resolve() if scripts_dir else Path.home() / "Projects" / "personal" / "userscripts"
+
+        styles_installed = []
+        styles_updated = []
+        styles_in_sync = 0
+        styles_total = 0
+
+        if s_dir.exists():
+            diff_s = self.diff_styles(s_dir)
+            styles_in_sync = diff_s["in_sync"]
+            styles_total = diff_s["total_local"]
+
+            for item in diff_s["only_local"]:
+                res = self.install_or_update_style(s_dir / item["file"])
+                styles_installed.append({"name": item["name"], "file": item["file"], "id": res["id"]})
+
+            for item in diff_s["modified"]:
+                res = self.install_or_update_style(s_dir / item["file"])
+                styles_updated.append({"name": item["name"], "file": item["file"], "id": res["id"]})
+
+        scripts_installed = []
+        scripts_updated = []
+        scripts_in_sync = 0
+        scripts_total = 0
+
+        if sc_dir.exists():
+            diff_sc = self.diff_scripts(sc_dir)
+            scripts_in_sync = diff_sc["in_sync"]
+            scripts_total = diff_sc["total_local"]
+
+            for item in diff_sc["only_local"]:
+                res = self.install_or_update_script(sc_dir / item["file"])
+                scripts_installed.append({"name": item["name"], "file": item["file"], "id": res["id"]})
+
+            for item in diff_sc["modified"]:
+                res = self.install_or_update_script(sc_dir / item["file"])
+                scripts_updated.append({"name": item["name"], "file": item["file"], "id": res["id"]})
+
+        return {
+            "status": "ok",
+            "styles": {
+                "total": styles_total,
+                "in_sync": styles_in_sync,
+                "installed": styles_installed,
+                "updated": styles_updated,
+            },
+            "scripts": {
+                "total": scripts_total,
+                "in_sync": scripts_in_sync,
+                "installed": scripts_installed,
+                "updated": scripts_updated,
+            },
+        }

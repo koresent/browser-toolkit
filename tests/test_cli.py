@@ -124,6 +124,12 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(args.ext_action, "backup")
         self.assertEqual(args.out_stylus, "custom-stylus.json")
 
+        # ext sync
+        args = self.parser.parse_args(["ext", "sync", "--styles-dir", "/tmp/styles", "--json"])
+        self.assertEqual(args.ext_action, "sync")
+        self.assertEqual(args.styles_dir, "/tmp/styles")
+        self.assertTrue(args.json)
+
     def test_config_subcommand_args(self):
         args1 = self.parser.parse_args(["config", "--set-format", "toon"])
         self.assertEqual(args1.command, "config")
