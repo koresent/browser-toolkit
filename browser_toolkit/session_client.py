@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -9,6 +10,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .session_server import get_session_pid_path, get_session_socket_path
+
+
+def generate_session_name(prefix: str = "sess") -> str:
+    """Generates an isolated random session identifier."""
+    return f"{prefix}-{secrets.token_hex(4)}"
 
 
 def resolve_session_name(session_name: Optional[str] = None) -> str:
@@ -55,9 +61,22 @@ def send_session_command(
     """Sends a command to the running session daemon and returns the response."""
     name = resolve_session_name(session_name)
     if not is_session_alive(name):
-        raise RuntimeError(
-            f"No active browser-toolkit session '{name}'. Start one with 'browser-toolkit session --name {name} start <url>'"
-        )
+        toolkit_dir = Path(tempfile.gettempdir()) / "browser-toolkit"
+        active_names: List[str] = []
+        if toolkit_dir.exists():
+            for sock in toolkit_dir.glob("session*.sock"):
+                s_name = "default" if sock.name == "session.sock" else (
+                    sock.stem[8:] if sock.name.startswith("session_") and sock.name.endswith(".sock") else None
+                )
+                if s_name and is_session_alive(s_name):
+                    active_names.append(s_name)
+
+        if active_names:
+            hint = f"Active sessions found: {active_names}. Specify '--name <id>' (or export BROWSER_TOOLKIT_SESSION=<id>)."
+        else:
+            hint = f"Start one with 'browser-toolkit session --name {name} start <url>'."
+
+        raise RuntimeError(f"No active browser-toolkit session '{name}'. {hint}")
 
     sock_path = get_session_socket_path(name)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -81,18 +100,34 @@ def send_session_command(
 def start_session(
     url: Optional[str] = None,
     session_name: Optional[str] = None,
+    random_name: bool = False,
     profile_path: Optional[str] = None,
     no_profile: bool = False,
     headful: bool = False,
     clean_styles: bool = False,
+    force: bool = False,
     wait_timeout: float = 20.0,
 ) -> Dict[str, Any]:
     """Starts session daemon if not running, or navigates existing session."""
-    name = resolve_session_name(session_name)
+    if random_name or (session_name and session_name.strip().lower() in ("auto", "random")):
+        name = generate_session_name()
+    else:
+        name = resolve_session_name(session_name)
+
     sock_path = get_session_socket_path(name)
 
     if is_session_alive(name):
         if url:
+            st = send_session_command({"action": "status"}, session_name=name)
+            active_url = (st.get("url") or "").rstrip("/")
+            target_url = url.rstrip("/")
+            if not force and active_url and active_url != "about:blank" and target_url != active_url:
+                raise RuntimeError(
+                    f"Session '{name}' is already active on '{active_url}' (title: '{st.get('title', '')}'). "
+                    f"Refusing to hijack existing session to '{url}'. "
+                    f"To run parallel tasks without collisions, use '--name <id>' (or '--name auto'). "
+                    f"To overwrite this session anyway, pass '--force'."
+                )
             return send_session_command({"action": "goto", "url": url}, session_name=name)
         return send_session_command({"action": "status"}, session_name=name)
 
@@ -165,7 +200,12 @@ def list_active_sessions() -> List[Dict[str, Any]]:
 
     active: List[Dict[str, Any]] = []
     for sock in toolkit_dir.glob("session*.sock"):
-        name = "default" if sock.name == "session.sock" else sock.stem.replace("session_", "")
+        if sock.name == "session.sock":
+            name = "default"
+        elif sock.name.startswith("session_") and sock.name.endswith(".sock"):
+            name = sock.stem[8:]
+        else:
+            continue
         if is_session_alive(name):
             try:
                 st = send_session_command({"action": "status"}, session_name=name, timeout=2.0)

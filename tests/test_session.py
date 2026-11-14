@@ -1,5 +1,7 @@
+import re
 import unittest
 from browser_toolkit.session_client import (
+    generate_session_name,
     is_session_alive,
     list_active_sessions,
     send_session_command,
@@ -13,6 +15,8 @@ class TestSessionLifecycle(unittest.TestCase):
         stop_session("default")
         stop_session("test_a")
         stop_session("test_b")
+        stop_session("test_guard")
+        stop_session("test_info")
 
     def test_session_lifecycle_and_commands(self):
         # Ensure clean state
@@ -157,3 +161,51 @@ class TestSessionLifecycle(unittest.TestCase):
         stop_session("test_b")
         self.assertFalse(is_session_alive("test_a"))
         self.assertFalse(is_session_alive("test_b"))
+
+    def test_generate_session_name(self):
+        name1 = generate_session_name()
+        name2 = generate_session_name()
+        self.assertTrue(re.match(r"^sess-[0-9a-f]{8}$", name1))
+        self.assertTrue(re.match(r"^sess-[0-9a-f]{8}$", name2))
+        self.assertNotEqual(name1, name2)
+
+    def test_anti_hijack_guard_and_force(self):
+        stop_session("test_guard")
+        s = start_session(url="about:blank", session_name="test_guard", no_profile=True, wait_timeout=15.0)
+        self.assertEqual(s.get("session_name"), "test_guard")
+
+        # Navigate to first page
+        send_session_command({"action": "goto", "url": "data:text/html,<h1>Page1</h1>"}, session_name="test_guard")
+
+        # Attempting start_session to another URL without force must fail
+        with self.assertRaises(RuntimeError) as ctx:
+            start_session(url="data:text/html,<h1>Page2</h1>", session_name="test_guard")
+        self.assertIn("already active on", str(ctx.exception))
+        self.assertIn("Refusing to hijack", str(ctx.exception))
+
+        # With force=True, navigation succeeds
+        forced = start_session(url="data:text/html,<h1>Page2</h1>", session_name="test_guard", force=True)
+        self.assertEqual(forced.get("status"), "ok")
+
+        stop_session("test_guard")
+        self.assertFalse(is_session_alive("test_guard"))
+
+    def test_random_session_start(self):
+        s = start_session(url="about:blank", random_name=True, no_profile=True, wait_timeout=15.0)
+        name = s.get("session_name", "")
+        try:
+            self.assertTrue(name.startswith("sess-"))
+            self.assertTrue(is_session_alive(name))
+        finally:
+            stop_session(name)
+
+    def test_missing_session_error_lists_active(self):
+        stop_session("test_info")
+        start_session(url="about:blank", session_name="test_info", no_profile=True, wait_timeout=15.0)
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                send_session_command({"action": "status"}, session_name="nonexistent_sess")
+            self.assertIn("test_info", str(ctx.exception))
+            self.assertIn("Active sessions found", str(ctx.exception))
+        finally:
+            stop_session("test_info")

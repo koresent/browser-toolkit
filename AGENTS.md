@@ -179,14 +179,15 @@ Adhere to the following golden rules when reverse-engineering and styling web ap
 
 ### Anti-Pattern 3: Repeated Cold Browser Launches for Multi-Step Exploration
 * **DO NOT** invoke `inspect` or `screenshot` 15 times in a row on the same site if it takes multi-step state setup.
-* Instead, start a persistent session:
+* Instead, start a persistent session with a **distinct, task-specific name** (`--name <id>`):
   ```bash
-  browser-toolkit session start "https://example.com" --toon
-  browser-toolkit session eval "document.title" --toon
-  browser-toolkit session interact --actions '[{"action": "click", "selector": "#menu"}]' --toon
-  browser-toolkit session screenshot --selector ".dropdown" --toon
-  browser-toolkit session stop --toon
+  browser-toolkit session --name site-auth start "https://example.com" --toon
+  browser-toolkit session --name site-auth eval "document.title" --toon
+  browser-toolkit session --name site-auth interact --actions '[{"action": "click", "selector": "#menu"}]' --toon
+  browser-toolkit session --name site-auth screenshot --selector ".dropdown" --toon
+  browser-toolkit session --name site-auth stop --toon
   ```
+* **NEVER** use the bare un-named `default` session across parallel agent workflows. Always scope your session by task name (`--name tg-k`, `--name gh-dark`, etc.).
 
 ---
 

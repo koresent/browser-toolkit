@@ -878,6 +878,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Command: session
     session_parser = subparsers.add_parser("session", help="Manage persistent Playwright browser session")
+    session_parser.add_argument("--name", "--session", dest="session_parent_name", help="Session identifier (default: 'default' or BROWSER_TOOLKIT_SESSION env var)")
     session_sub = session_parser.add_subparsers(dest="session_command", required=True)
 
     def add_session_name_arg(sub_p: argparse.ArgumentParser) -> None:
@@ -890,11 +891,13 @@ def build_parser() -> argparse.ArgumentParser:
     s_list = session_sub.add_parser("list", help="List all running browser sessions")
     add_output_args(s_list)
 
-    # session start [url] [--name NAME] [--no-profile] [--profile PATH] [--headful] [--clean-styles]
+    # session start [url] [--name NAME] [--no-profile] [--profile PATH] [--headful] [--clean-styles] [--force] [--random]
     s_start = session_sub.add_parser("start", help="Start background session daemon or navigate to URL")
     s_start.add_argument("url", nargs="?", help="Initial URL to navigate")
     add_profile_args(s_start)
     add_session_name_arg(s_start)
+    s_start.add_argument("--force", action="store_true", help="Force reuse or navigation of active session even if open on a different URL")
+    s_start.add_argument("--random", "--auto", dest="random_name", action="store_true", help="Generate an isolated unique session name (e.g. sess-a1b2c3d4)")
     add_output_args(s_start)
 
     # session status [--name NAME]
@@ -1025,7 +1028,11 @@ def main() -> None:
 
     if args.command == "session":
         session_cmd = getattr(args, "session_command", None)
-        session_name = getattr(args, "name", None) or getattr(args, "session", None)
+        session_name = (
+            getattr(args, "name", None)
+            or getattr(args, "session", None)
+            or getattr(args, "session_parent_name", None)
+        )
 
         if session_cmd == "list":
             sessions = list_active_sessions()
@@ -1046,13 +1053,16 @@ def main() -> None:
             sys.exit(0)
 
         elif session_cmd == "start":
+            is_random = getattr(args, "random_name", False) or (session_name and session_name.strip().lower() in ("auto", "random"))
             res = start_session(
                 url=getattr(args, "url", None),
-                session_name=session_name,
+                session_name=None if is_random else session_name,
+                random_name=is_random,
                 profile_path=getattr(args, "profile", None),
                 no_profile=getattr(args, "no_profile", False),
                 headful=getattr(args, "headful", False),
                 clean_styles=getattr(args, "clean_styles", False),
+                force=getattr(args, "force", False),
             )
             output_result(
                 res,
