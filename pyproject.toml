@@ -13,6 +13,7 @@ dependencies = [
 [project.scripts]
 browser-toolkit = "browser_toolkit.cli:main"
 browser-auditor = "browser_toolkit.cli:main"
+btk = "browser_toolkit.cli:main"
 
 [build-system]
 requires = ["hatchling"]

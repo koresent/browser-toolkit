@@ -74,7 +74,7 @@ def send_session_command(
         if active_names:
             hint = f"Active sessions found: {active_names}. Specify '--name <id>' (or export BROWSER_TOOLKIT_SESSION=<id>)."
         else:
-            hint = f"Start one with 'browser-toolkit session --name {name} start <url>'."
+            hint = f"Start one with 'btk session --name {name} start <url>'."
 
         raise RuntimeError(f"No active browser-toolkit session '{name}'. {hint}")
 

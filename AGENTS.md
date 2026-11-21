@@ -1,12 +1,15 @@
 # AGENTS.md — Browser Toolkit Operational Guide for AI Agents
 
-This document defines the interface, operational principles, tool capabilities, and extensibility protocols for AI coding agents working with **Browser Toolkit**.
+This document defines the interface, operational principles, tool capabilities, and extensibility protocols for AI coding agents working with **Browser Toolkit** (`browser-toolkit` / `btk`).
 
 ---
 
 ## 1. Operating Environment & Philosophy
 
 `browser-toolkit` is an autonomous agentic toolkit for inspecting, reverse-engineering, authoring, auditing, and managing **UserStyles** (`.user.css`) and **UserScripts** (`.user.js`).
+
+### Preferred CLI Executable: `btk`
+* **Always use `btk` instead of `browser-toolkit`**: The short executable alias `btk` is identical in behavior to `browser-toolkit`. AI agents must use `btk` in all shell commands to conserve prompt/completion tokens and reduce context footprint.
 
 ### Core Environment Constraints
 * **Engine**: Firefox / Gecko via Playwright (`p.firefox`). Target browser is Zen Browser.
@@ -31,19 +34,19 @@ Choose **one** of the following two methods:
 * **Method A (Persistent Configuration — Recommended)**:
   Run once at the start of your workflow:
   ```bash
-  browser-toolkit config --set-format toon
+  btk config --set-format toon
   ```
   Once set, every subsequent CLI command automatically outputs TOON without requiring `--toon` or environment variables.
 
 * **Method B (Explicit CLI Flag)**:
   Pass `--toon` on each command:
   ```bash
-  browser-toolkit <subcommand> [args] --toon
+  btk <subcommand> [args] --toon
   ```
 
 > [!WARNING]
 > **NEVER prepend `export BROWSER_TOOLKIT_FORMAT=toon;` on every single command or combine it with `--toon`**.
-> Chaining `export BROWSER_TOOLKIT_FORMAT=toon; browser-toolkit ... --toon` is redundant and wasteful. Set the persistent config once (Method A) or use the `--toon` flag (Method B).
+> Chaining `export BROWSER_TOOLKIT_FORMAT=toon; btk ... --toon` is redundant and wasteful. Set the persistent config once (Method A) or use the `--toon` flag (Method B).
 
 **Rules for Agents**:
 * Never request `--json` or unformatted human text output.
@@ -152,7 +155,7 @@ Direct programmatic access to browser extension state via IndexedDB:
 * **Safe Artifact Paths**: Screenshots and rule test outputs default to unique timestamped files in `/tmp/browser-toolkit/screenshots/` and `/tmp/browser-toolkit/rule-test/`. Agents should always consume the path reported in `saved_to` or `screenshot_*` rather than assuming a hardcoded filename.
 
 ### I. Configuration & Defaults
-* **`config [--set-format toon|json|json-pretty|text] [key] [value]`**: Inspects or persists CLI defaults (e.g., `browser-toolkit config --set-format toon` writes to `/tmp/browser-toolkit/default_format`).
+* **`config [--set-format toon|json|json-pretty|text] [key] [value]`**: Inspects or persists CLI defaults (e.g., `btk config --set-format toon` writes to `/tmp/browser-toolkit/default_format`).
 
 ---
 
@@ -165,15 +168,15 @@ Adhere to the following golden rules when reverse-engineering and styling web ap
 * SPAs minify, hash, and dynamically chunk code across dozens of files. Grepping raw JavaScript bundles burns thousands of context tokens and yields obsolete, mangled, or unreachable class names.
 * **Always search the live rendered DOM**:
   ```bash
-  browser-toolkit search <url> --text "Visible Label" --toon
-  browser-toolkit search <url> --keyword "search-input" --toon
+  btk search <url> --text "Visible Label" --toon
+  btk search <url> --keyword "search-input" --toon
   ```
 
 ### Anti-Pattern 2: Manual Color Guessing Without `extract-palette`
 * **NEVER** guess color values or manually hunt through CSS files before inspecting the live palette.
 * Always run:
   ```bash
-  browser-toolkit extract-palette <url> --toon
+  btk extract-palette <url> --toon
   ```
   This immediately clusters colors by DOM frequency and surfaces root CSS custom properties (`--color-...`, `--bg-...`, `--border-...`).
 
@@ -181,11 +184,11 @@ Adhere to the following golden rules when reverse-engineering and styling web ap
 * **DO NOT** invoke `inspect` or `screenshot` 15 times in a row on the same site if it takes multi-step state setup.
 * Instead, start a persistent session with a **distinct, task-specific name** (`--name <id>`):
   ```bash
-  browser-toolkit session --name site-auth start "https://example.com" --toon
-  browser-toolkit session --name site-auth eval "document.title" --toon
-  browser-toolkit session --name site-auth interact --actions '[{"action": "click", "selector": "#menu"}]' --toon
-  browser-toolkit session --name site-auth screenshot --selector ".dropdown" --toon
-  browser-toolkit session --name site-auth stop --toon
+  btk session --name site-auth start "https://example.com" --toon
+  btk session --name site-auth eval "document.title" --toon
+  btk session --name site-auth interact --actions '[{"action": "click", "selector": "#menu"}]' --toon
+  btk session --name site-auth screenshot --selector ".dropdown" --toon
+  btk session --name site-auth stop --toon
   ```
 * **NEVER** use the bare un-named `default` session across parallel agent workflows. Always scope your session by task name (`--name tg-k`, `--name gh-dark`, etc.).
 
@@ -197,7 +200,7 @@ When modifying or extending `browser-toolkit`, agents must adhere to the followi
 
 ### Rule 1: The Recurring-Need Gate (Anti-Bloat Filter)
 * **DO NOT** add new CLI commands or permanent modules for one-off tasks.
-* **DO NOT re-implement browser-toolkit capabilities in scratch scripts**: Never write ad-hoc Playwright scripts that duplicate existing CLI commands (`inspect`, `search`, `test-rule`, `check-theme`, `screenshot`, `extract-palette`, etc.). The CLI is already battle-tested for profile cloning, redirect resilience, and token efficiency.
+* **DO NOT re-implement browser-toolkit capabilities in scratch scripts**: Never write ad-hoc Playwright scripts that duplicate existing `btk` CLI commands (`inspect`, `search`, `test-rule`, `check-theme`, `screenshot`, `extract-palette`, etc.). The CLI is already battle-tested for profile cloning, redirect resilience, and token efficiency.
 * Ephemeral scratch scripts in the conversation's scratch directory are reserved **ONLY** for genuine one-off tasks that cannot be accomplished with existing CLI commands.
 * A permanent tool is justified **ONLY** when:
   1. The functionality solves a recurring browser engineering problem across at least 3 distinct sites or styles/scripts.

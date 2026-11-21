@@ -243,6 +243,21 @@ class TestCLI(unittest.TestCase):
         self.assertFalse(_safe_is_file(long_css))
         self.assertTrue(_safe_is_file(__file__))
 
+    def test_btk_entrypoint_registered(self):
+        from pathlib import Path
+        pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        self.assertTrue(pyproject_path.exists())
+        try:
+            import tomllib
+            with open(pyproject_path, "rb") as f:
+                data = tomllib.load(f)
+            scripts = data.get("project", {}).get("scripts", {})
+            self.assertEqual(scripts.get("btk"), "browser_toolkit.cli:main")
+            self.assertEqual(scripts.get("browser-toolkit"), "browser_toolkit.cli:main")
+        except ImportError:
+            content = pyproject_path.read_text(encoding="utf-8")
+            self.assertIn('btk = "browser_toolkit.cli:main"', content)
+
 
 if __name__ == "__main__":
     unittest.main()
