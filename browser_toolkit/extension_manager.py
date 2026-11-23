@@ -366,11 +366,14 @@ class ExtensionManager:
                             continue
 
                         if isinstance(val, dict):
+                            config = val.get("config") or {}
+                            if bool(config.get("removed", 0)):
+                                continue
                             meta = val.get("meta") or {}
                             custom = val.get("custom") or {}
                             name = custom.get("name") or meta.get("name") or f"Script #{s_id}"
                             version = meta.get("version", "1.0.0")
-                            enabled = bool(val.get("config", {}).get("enabled", True))
+                            enabled = bool(config.get("enabled", True))
                             matches = list(getattr(meta.get("match"), "values", meta.get("match") or []))
 
                             scripts_map[s_id] = ViolentmonkeyScript(

@@ -37,6 +37,11 @@ class TestSessionLifecycle(unittest.TestCase):
         eval_res = send_session_command({"action": "eval", "script": "10 + 25"}, session_name="default")
         self.assertEqual(eval_res.get("result"), 35)
 
+        # Eval error handling
+        err_res = send_session_command({"action": "eval", "script": "throw new Error('deliberate_eval_error')"}, session_name="default")
+        self.assertEqual(err_res.get("status"), "error")
+        self.assertIn("deliberate_eval_error", err_res.get("message", ""))
+
         # Eval many
         batch_res = send_session_command({
             "action": "eval_many",

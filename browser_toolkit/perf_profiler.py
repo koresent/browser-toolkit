@@ -14,6 +14,7 @@ from .parser import parse_userscript, parse_userstyle, UserScriptInfo
 
 INIT_PERF_TRACKER_JS = """
 (() => {
+  window.__bt_perf_stop = false;
   if (window.__bt_perf_installed) return;
   window.__bt_perf_installed = true;
 
@@ -34,10 +35,12 @@ INIT_PERF_TRACKER_JS = """
       }
     });
     ltObs.observe({ type: 'longtask', buffered: true });
+    window.__bt_perf_lt_obs = ltObs;
   } catch (_) {}
 
   let lastTick = performance.now();
   function checkJank() {
+    if (window.__bt_perf_stop) return;
     const now = performance.now();
     const elapsed = now - lastTick;
     if (elapsed > 50) {
@@ -61,6 +64,7 @@ INIT_PERF_TRACKER_JS = """
       }
     });
     lcpObs.observe({ type: 'largest-contentful-paint', buffered: true });
+    window.__bt_perf_lcp_obs = lcpObs;
   } catch (_) {}
 
   try {
@@ -72,6 +76,7 @@ INIT_PERF_TRACKER_JS = """
       }
     });
     clsObs.observe({ type: 'layout-shift', buffered: true });
+    window.__bt_perf_cls_obs = clsObs;
   } catch (_) {}
 
   try {
@@ -94,6 +99,7 @@ INIT_PERF_TRACKER_JS = """
     };
     attach();
     document.addEventListener('DOMContentLoaded', attach);
+    window.__bt_perf_mutation_obs = observer;
   } catch (_) {}
 })();
 """
@@ -101,6 +107,13 @@ INIT_PERF_TRACKER_JS = """
 
 COLLECT_PERF_METRICS_JS = """
 (() => {
+  window.__bt_perf_stop = true;
+  window.__bt_perf_installed = false;
+  try { if (window.__bt_perf_lt_obs) window.__bt_perf_lt_obs.disconnect(); } catch (_) {}
+  try { if (window.__bt_perf_lcp_obs) window.__bt_perf_lcp_obs.disconnect(); } catch (_) {}
+  try { if (window.__bt_perf_cls_obs) window.__bt_perf_cls_obs.disconnect(); } catch (_) {}
+  try { if (window.__bt_perf_mutation_obs) window.__bt_perf_mutation_obs.disconnect(); } catch (_) {}
+
   const nav = performance.getEntriesByType('navigation')[0] || {};
   const paints = performance.getEntriesByType('paint');
   let fp = 0;

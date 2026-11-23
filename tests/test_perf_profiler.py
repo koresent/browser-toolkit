@@ -93,7 +93,12 @@ class TestPerfProfiler(unittest.TestCase):
         page.wait_for_timeout(100)
 
         raw = page.evaluate(COLLECT_PERF_METRICS_JS)
+        is_stopped = page.evaluate("window.__bt_perf_stop")
+        is_installed = page.evaluate("window.__bt_perf_installed")
         page.close()
+
+        self.assertTrue(is_stopped)
+        self.assertFalse(is_installed)
 
         self.assertIn("navigation", raw)
         self.assertIn("paint", raw)

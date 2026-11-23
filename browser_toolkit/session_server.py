@@ -143,29 +143,33 @@ class SessionServer:
     def _handle_client(self, conn: socket.socket, page: Any, context: Any) -> None:
         conn.settimeout(30.0)
         try:
-            with conn:
-                buf = b""
-                while b"\n" not in buf:
-                    chunk = conn.recv(4096)
-                    if not chunk:
-                        break
-                    buf += chunk
+            buf = b""
+            while b"\n" not in buf:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
 
-                if not buf:
-                    return
+            if not buf:
+                return
 
-                line = buf.decode("utf-8").strip()
-                if not line:
-                    return
+            line = buf.decode("utf-8").strip()
+            if not line:
+                return
 
-                req = json.loads(line)
-                action = req.get("action", "")
-                response = self._process_command(action, req, page, context)
-                conn.sendall(json.dumps(response).encode("utf-8") + b"\n")
+            req = json.loads(line)
+            action = req.get("action", "")
+            response = self._process_command(action, req, page, context)
+            conn.sendall(json.dumps(response).encode("utf-8") + b"\n")
         except Exception as e:
             try:
                 err_resp = {"status": "error", "message": str(e)}
                 conn.sendall(json.dumps(err_resp).encode("utf-8") + b"\n")
+            except OSError:
+                pass
+        finally:
+            try:
+                conn.close()
             except OSError:
                 pass
 
