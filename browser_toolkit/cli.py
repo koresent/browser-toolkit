@@ -523,6 +523,56 @@ def print_diff_scripts(diff: Dict[str, Any]) -> None:
             print(f"  • [{oi['id']}] {oi['name']} (v{oi['version']})")
 
 
+def print_perf_summary(data: Dict[str, Any]) -> None:
+    print(f"Performance Profile: {data.get('url')} ({data.get('duration_seconds')}s)")
+    vitals = data.get("web_vitals", {})
+    print(
+        f"  Web Vitals: TTFB: {vitals.get('ttfb_ms')}ms | FCP: {vitals.get('fcp_ms')}ms | "
+        f"LCP: {vitals.get('lcp_ms')}ms | Load: {vitals.get('load_event_ms')}ms | CLS: {vitals.get('cls')}"
+    )
+
+    mt = data.get("main_thread", {})
+    print(
+        f"  Main Thread: Long Tasks: {mt.get('long_tasks_count')} | "
+        f"TBT: {mt.get('total_blocking_time_ms')}ms | Max Task: {mt.get('max_task_duration_ms')}ms"
+    )
+
+    sys_res = data.get("system_resources", {})
+    print(
+        f"  PC Resources: Processes: {sys_res.get('process_count')} | "
+        f"RSS: {sys_res.get('start_rss_mb')}MB -> {sys_res.get('end_rss_mb')}MB "
+        f"(Peak: {sys_res.get('peak_rss_mb')}MB, Delta: {sys_res.get('rss_delta_mb')}MB) | "
+        f"CPU: Avg {sys_res.get('avg_cpu_percent')}% (Peak: {sys_res.get('peak_cpu_percent')}%)"
+    )
+
+    dom = data.get("dom_mutations", {})
+    print(
+        f"  DOM Churn: Total: {dom.get('total')} ({dom.get('rate_per_sec')}/s) | "
+        f"Added: {dom.get('added')} | Removed: {dom.get('removed')} | Attrs: {dom.get('attributes')}"
+    )
+
+    res = data.get("resources_summary", {})
+    print(f"  Network: {res.get('total_requests')} requests ({res.get('total_transfer_kb')} KB transfer)")
+
+    slowest = data.get("slowest_resources", [])
+    if slowest:
+        print("  Top Slowest Resources:")
+        for s in slowest[:3]:
+            u = s.get("url", "")
+            if len(u) > 80:
+                u = u[:77] + "..."
+            print(f"    • [{s.get('initiator')}] {s.get('duration_ms')}ms ({s.get('size_kb')}KB): {u}")
+
+    if data.get("script_impact"):
+        si = data["script_impact"]
+        err_msg = f" | Error: {si.get('error')}" if si.get("error") else ""
+        print(f"  Script Impact: Execution: {si.get('execution_ms')}ms{err_msg}")
+
+    if data.get("css_impact"):
+        ci = data["css_impact"]
+        print(f"  CSS Impact: Injection: {ci.get('injection_ms')}ms | Reflow/Recalc: {ci.get('reflow_recalc_ms')}ms | Total: {ci.get('total_impact_ms')}ms")
+
+
 TEMP_TOOLKIT_DIR = Path(tempfile.gettempdir()) / "browser-toolkit"
 
 
@@ -697,6 +747,18 @@ def build_parser() -> argparse.ArgumentParser:
     add_theme_check_args(theme_parser)
     add_profile_args(theme_parser)
     add_output_args(theme_parser)
+
+    # Command: perf
+    perf_parser = subparsers.add_parser("perf", help="Profile page performance, main thread blocking, DOM churn, network assets, and PC resource usage")
+    perf_parser.add_argument("url", help="Target URL to profile")
+    perf_parser.add_argument("--script", help="Optional path to .user.js or .js to audit execution impact")
+    perf_parser.add_argument("--css", help="Optional path to .user.css or .css to audit injection and reflow impact")
+    perf_parser.add_argument("--actions", help="JSON string or file path containing user actions (click, hover, fill, scroll)")
+    perf_parser.add_argument("--duration", type=float, default=2.0, help="Observation duration in seconds (default: 2.0)")
+    perf_parser.add_argument("--wait", help="Selector or millisecond timeout to wait after navigation")
+    perf_parser.add_argument("--sample-interval", type=float, default=0.1, help="System resource sampling interval in seconds (default: 0.1)")
+    add_profile_args(perf_parser)
+    add_output_args(perf_parser)
 
     # Command: test-script
     test_script_parser = subparsers.add_parser("test-script", help="Interactive UserScript testing with DOM mutations, network log, and menu command triggers")
@@ -981,6 +1043,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_session_name_arg(s_shot)
     add_output_args(s_shot)
 
+    # session perf [--duration S] [--actions ACTIONS] [--frame FRAME] [--name NAME]
+    s_perf = session_sub.add_parser("perf", help="Profile performance and resource usage in active session")
+    s_perf.add_argument("--duration", type=float, default=2.0, help="Observation duration in seconds (default: 2.0)")
+    s_perf.add_argument("--actions", help="JSON string or file path containing user actions")
+    add_frame_arg(s_perf)
+    add_session_name_arg(s_perf)
+    add_output_args(s_perf)
+
     # session stop [--name NAME]
     s_stop = session_sub.add_parser("stop", help="Stop background session daemon and close browser")
     add_session_name_arg(s_stop)
@@ -1247,6 +1317,21 @@ def main() -> None:
             )
             sys.exit(0 if res.get("status") == "ok" else 1)
 
+        elif session_cmd == "perf":
+            actions_list = parse_actions_arg(args.actions) if getattr(args, "actions", None) else None
+            res = send_session_command({
+                "action": "perf",
+                "duration": args.duration,
+                "actions": actions_list,
+                "frame": getattr(args, "frame", None),
+            }, session_name=session_name)
+            output_result(
+                res.get("profile", res),
+                args,
+                print_perf_summary,
+            )
+            sys.exit(0 if res.get("status") == "ok" else 1)
+
         elif session_cmd == "stop":
             res = stop_session(session_name)
             output_result(
@@ -1432,6 +1517,19 @@ def main() -> None:
             exclude_colors=excl,
         )
         output_result(data, args, print_theme_flaws_summary)
+
+    elif args.command == "perf":
+        actions_list = parse_actions_arg(getattr(args, "actions", None))
+        data = runner.audit_performance(
+            url=args.url,
+            script_path=getattr(args, "script", None),
+            css_path=getattr(args, "css", None),
+            actions=actions_list,
+            duration=args.duration,
+            wait=getattr(args, "wait", None),
+            sample_interval=getattr(args, "sample_interval", 0.1),
+        )
+        output_result(data, args, print_perf_summary)
 
     elif args.command == "test-script":
         actions_list = None

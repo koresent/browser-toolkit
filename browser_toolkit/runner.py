@@ -26,6 +26,7 @@ from .spa_checker import check_spa_resilience
 from .css_color_extractor import extract_colors_from_file_or_url
 from .responsive_checker import ResponsiveChecker
 from .theme_flaw_checker import ThemeFlawChecker, theme_report_to_dict
+from .perf_profiler import audit_page_performance, PerformanceReport
 from .gm_shim import GM_FULL_SHIM_JS
 from .mutation_tracker import attach_mutation_tracker, collect_dom_mutations
 from .extension_manager import ExtensionManager
@@ -678,6 +679,36 @@ class AuditorRunner:
                 try:
                     report = checker.audit(page, url=url)
                     return theme_report_to_dict(report)
+                finally:
+                    context.close()
+
+    def audit_performance(
+        self,
+        url: str,
+        script_path: Optional[str | Path] = None,
+        css_path: Optional[str | Path] = None,
+        actions: Optional[List[Dict[str, Any]]] = None,
+        duration: float = 2.0,
+        wait: Optional[str | int] = None,
+        settle_ms: int = 500,
+        sample_interval: float = 0.1,
+    ) -> Dict[str, Any]:
+        with self._profile_context() as temp_profile:
+            with sync_playwright() as p:
+                context, page = self._launch_browser_context(p, temp_profile, bypass_csp=True)
+                try:
+                    report = audit_page_performance(
+                        page=page,
+                        url=url,
+                        script_path=script_path,
+                        css_path=css_path,
+                        actions=actions,
+                        duration=duration,
+                        wait=wait,
+                        settle_ms=settle_ms,
+                        sample_interval=sample_interval,
+                    )
+                    return report.to_dict()
                 finally:
                     context.close()
 

@@ -104,7 +104,11 @@ Compose tools dynamically according to the user's goal:
 * **`check-spa <script.user.js> <target_url> [--initial-url <url>] --toon`**  
   Simulates client-side SPA route transitions (Turbo, Next.js, YouTube) and verifies that injected elements persist or re-mount without errors.
 
-### E. Extension Management (Stylus & Violentmonkey)
+### E. Performance & System Resource Profiling
+* **`perf <url> [--script PATH] [--css PATH] [--actions JSON] [--duration S] [--wait SEL_OR_MS] --toon`**  
+  Profiles Core Web Vitals (TTFB, FCP, LCP, DCL, Load, CLS), main thread long tasks (>50ms) and Total Blocking Time (TBT), network asset transfer weights, DOM mutation rates, and PC hardware utilization (browser process count, RSS memory start/peak/delta, and average/peak CPU%). Supports script execution benchmarking (`--script`) and style recalculation/reflow cost analysis (`--css`).
+
+### F. Extension Management (Stylus & Violentmonkey)
 Direct programmatic access to browser extension state via IndexedDB:
 * **`ext status --toon`**: Profile path, database files, and active style/script counts.
 * **`ext list-styles [--search Q] --toon`**: List installed Stylus styles with enabled state and domains.
@@ -123,12 +127,12 @@ Direct programmatic access to browser extension state via IndexedDB:
 * **`ext export-styles <dir>`** / **`ext export-scripts <dir>`**: Export database records as clean source files.
 * **`ext serve [--port 8080]`**: Launch local 1-click install & sync server hub.
 
-### F. Repository Scanning & Live Watchers
+### G. Repository Scanning & Live Watchers
 * **`scan <dir> [--only-broken] --toon`**: Batch health audit across all `.user.css` and `.user.js` files in a folder.
 * **`preview <url> <style.user.css>`**: Live hot-reload watcher injecting CSS in <20ms without page refresh.
 * **`preview-js <script.user.js>`**: Live hot-reload watcher for scripts.
 
-### G. Browser Automation & Persistent Sessions
+### H. Browser Automation & Persistent Sessions
 * **`screenshot <url> [--selector SEL] [--hover SEL] [--wait SEL] [--full-page] [--output PATH] --toon`**: Capture viewport or element screenshot (defaults to unique timestamped file in `/tmp/browser-toolkit/screenshots/`).
 * **`interact <url> --actions <json_or_file> --toon`**: Execute action sequences (`click`, `click_text`, `hover`, `fill`, `press`, `wait`, `wait_for`, `scroll`, `scroll_into_view`, `evaluate`, `evaluate_many`, `screenshot`).
 * **`session start [url] [--name ID] [--no-profile] [--profile PATH] [--headful] [--clean-styles] --toon`**: Launches a background session daemon named `ID` (default: `'default'` or `BROWSER_TOOLKIT_SESSION` env var) maintaining an active Playwright instance, Zen profile clone, and open page over `/tmp/browser-toolkit/session_<ID>.sock`. Pass `--clean-styles` to strip installed Stylus styles in the temporary clone while keeping logins/cookies intact. Automatically closes after 15 minutes of inactivity.
@@ -144,17 +148,18 @@ Direct programmatic access to browser extension state via IndexedDB:
 * **`session check-theme [--css <path>] [--theme dark|light] [--exclude-colors COLORS] [--frame FRAME] [--name ID] --toon`**: Runs `check-theme` inside the live session page or iframe (ideal after opening menus/popups).
 * **`session inject-script <file_or_js> [--settle-ms MS] [--name ID] --toon`**: Injects a `.user.js` UserScript or raw JavaScript file into the active session with GM polyfills.
 * **`session interact --actions <json_or_file> [--frame FRAME] [--name ID] --toon`**: Executes action sequence in the active session (or target iframe).
+* **`session perf [--duration S] [--actions JSON] [--frame FRAME] [--name ID] --toon`**: Profiles Web Vitals, main thread blocking, and hardware resources in the active session.
 * **`session screenshot [--selector SEL] [--output PATH] [--full-page] [--name ID] --toon`**: Captures screenshot from the active session.
 * **`session stop [--name ID] --toon`**: Cleanly shuts down daemon, context, and temp profile for session `ID`.
 
-### H. Multi-Agent Concurrency & Isolation
+### I. Multi-Agent Concurrency & Isolation
 `browser-toolkit` is designed for parallel multi-agent workflows where multiple AI agents work concurrently on different styles and scripts:
-* **Zero DOM Collisions**: Standalone commands (`search`, `inspect`, `check-theme`, `check-contrast`, `test-rule`, `audit`) create independent temporary profile clones (`tempfile.mkdtemp`). Multiple agents can inspect different sites concurrently with zero cross-talk.
+* **Zero DOM Collisions**: Standalone commands (`search`, `inspect`, `check-theme`, `check-contrast`, `test-rule`, `audit`, `perf`) create independent temporary profile clones (`tempfile.mkdtemp`). Multiple agents can inspect different sites concurrently with zero cross-talk.
 * **Session Namespaces**: When multiple agents use persistent sessions, each agent must specify a distinct session name (e.g., `session --name tg start ...` or `export BROWSER_TOOLKIT_SESSION=tg`). Use `session list --toon` to discover active sessions across all agents.
 * **Thread-Safe Extension DB Writes**: All modifications to Stylus and Violentmonkey databases (`install-style`, `delete-style`, `install-script`, `delete-script`, `enable-*`) are protected by an inter-process file lock (`fcntl.flock`), preventing SQLite database corruption when agents install styles/scripts simultaneously.
 * **Safe Artifact Paths**: Screenshots and rule test outputs default to unique timestamped files in `/tmp/browser-toolkit/screenshots/` and `/tmp/browser-toolkit/rule-test/`. Agents should always consume the path reported in `saved_to` or `screenshot_*` rather than assuming a hardcoded filename.
 
-### I. Configuration & Defaults
+### J. Configuration & Defaults
 * **`config [--set-format toon|json|json-pretty|text] [key] [value]`**: Inspects or persists CLI defaults (e.g., `btk config --set-format toon` writes to `/tmp/browser-toolkit/default_format`).
 
 ---

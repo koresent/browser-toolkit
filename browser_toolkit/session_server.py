@@ -370,6 +370,45 @@ class SessionServer:
             self.running = False
             return {"status": "ok", "session_name": self.session_name, "message": "Session stopped"}
 
+        if action == "perf":
+            from .perf_profiler import (
+                COLLECT_PERF_METRICS_JS,
+                INIT_PERF_TRACKER_JS,
+                PerformanceReport,
+                SystemResourceMonitor,
+            )
+            try:
+                page.evaluate(INIT_PERF_TRACKER_JS)
+            except Exception:
+                pass
+            duration = float(req.get("duration", 2.0))
+            actions_list = req.get("actions")
+            sys_mon = SystemResourceMonitor()
+            sys_mon.start()
+            t_start = time.time()
+            if actions_list:
+                execute_action_sequence(target, actions_list)
+            if duration > 0:
+                page.wait_for_timeout(int(duration * 1000))
+            raw_metrics = target.evaluate(COLLECT_PERF_METRICS_JS)
+            sys_metrics = sys_mon.stop()
+            t_end = time.time()
+            tot_dur = round(t_end - t_start, 2)
+            dom_muts = raw_metrics.get("dom_mutations", {})
+            dom_muts["rate_per_sec"] = round(dom_muts.get("total", 0) / tot_dur, 1) if tot_dur > 0 else 0.0
+            report = PerformanceReport(
+                url=target_url,
+                duration_seconds=tot_dur,
+                navigation=raw_metrics.get("navigation", {}),
+                paint=raw_metrics.get("paint", {}),
+                layout=raw_metrics.get("layout", {}),
+                long_tasks=raw_metrics.get("long_tasks", {}),
+                resources=raw_metrics.get("resources", {}),
+                dom_mutations=dom_muts,
+                system_resources=sys_metrics,
+            )
+            return {"status": "ok", "session_name": self.session_name, "profile": report.to_dict()}
+
         return {"status": "error", "message": f"Unknown action: {action}"}
 
 
